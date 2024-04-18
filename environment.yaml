@@ -1,0 +1,13 @@
+name: marlo
+channels:
+  - conda-forge
+  - crowdai
+dependencies:
+  - python=3.7
+  - pip
+  - malmo
+  - future
+  - pillow
+  - pip:
+    - marlo
+    - psutil
