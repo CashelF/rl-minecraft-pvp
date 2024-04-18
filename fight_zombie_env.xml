@@ -31,14 +31,16 @@
         <AgentHandlers>
             <ObservationFromFullStats/>
             <DiscreteMovementCommands/>
-            <ObservationFromNearbyEntities>
-                <Range name="entities" xrange="10" yrange="2" zrange="10" update_frequency="1"/>
-            </ObservationFromNearbyEntities>
-            <ContinuousMovementCommands turnSpeedDegs="180"/>
-            <InventoryCommands/>
-            <AgentQuitFromTouchingBlockType>
-                <Block type="lava"/>
-            </AgentQuitFromTouchingBlockType>
+            <ContinuousMovementCommands/>
+            <RewardForDamagingEntity>
+                <Mob type="Zombie" reward="5"/>
+            </RewardForDamagingEntity>
+            <RewardForCollectingItem>
+                <Item type="rotten_flesh" reward="100"/>
+            </RewardForCollectingItem>
+            <RewardForMissionEnd>
+                <Reward description="killed zombie" reward="1000" />
+            </RewardForMissionEnd>
         </AgentHandlers>
     </AgentSection>
 

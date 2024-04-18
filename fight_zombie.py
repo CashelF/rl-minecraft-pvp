@@ -1,8 +1,10 @@
 import json
 
 import marlo
+import torchvision.transforms as transforms
+import torchvision.transforms.functional as TF
 
-from dqn import create_dqn_model, train_dqn
+from dqn import DQN, train_dqn
 
 
 def init_env():
@@ -36,8 +38,22 @@ def example(env):
         env.close()
 
 
+def resize_and_normalize(img, size=(150, 100)):
+    # Convert numpy array to PIL Image for resizing
+    img = TF.to_pil_image(img)
+    img = TF.resize(img, size)
+    # Convert back to tensor and normalize
+    img = TF.to_tensor(img)
+    img = TF.normalize(img, [0.485, 0.456, 0.406], [0.229, 0.224, 0.225])  # Standard normalization values
+    return img
+
 if __name__ == "__main__":
     env = init_env()
     
-    train_dqn(env)
+    dqn_model = DQN(env.action_space.n)
+    # Image Preprocessing
+    transform = transforms.Lambda(lambda img: resize_and_normalize(img))
+    
+    train_dqn(env, dqn_model, transform)
+    # example(env)
     
