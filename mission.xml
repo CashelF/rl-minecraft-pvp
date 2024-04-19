@@ -45,10 +45,10 @@
             <ContinuousMovementCommands/>
             <!-- <DiscreteMovementCommands/> -->
             <RewardForDamagingEntity>
-                <Mob type="Zombie" reward="5"/>
+                <Mob type="Zombie" reward="1"/>
             </RewardForDamagingEntity>
             <RewardForMissionEnd> 
-                <Reward description="MALMO_AGENT_DIED" reward="-100" />
+                <Reward description="MALMO_AGENT_DIED" reward="-10" />
                 <!-- <Reward description="quit" reward="100" /> -->
 
             </RewardForMissionEnd>
