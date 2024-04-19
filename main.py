@@ -59,6 +59,9 @@ def preprocess_observation(observation: dict) -> torch.Tensor:
         feature.append(entity['pitch'])
         feature.append(entity['yaw'])
         feature.append(entity['life'])
+        
+    if len(feature) < 12:
+      feature += [0] * (12 - len(feature))
 
     return torch.tensor(feature, dtype=torch.float32)
   except:
@@ -80,6 +83,16 @@ def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initia
 
   # Initializ epsilon
   epsilon = initial_epsilon
+  
+  # env.agent_host.sendCommand("use 1")
+  # env.agent_host.sendCommand("hotbar.2")
+  # env.agent_host.sendCommand("hotbar.1 0")
+  # env.agent_host.sendCommand("hotbar.2 0")
+  # env.agent_host.sendCommand("hotbar.3 1")
+  # env.agent_host.sendCommand("hotbar.3 0")
+  # env.agent_host.sendCommand("hotbar.4 1")
+  # env.agent_host.sendCommand("hotbar.4 0")
+  # env.agent_host.sendCommand("use 0")
 
   # Run the training loop
   for episode in range(episodes):
@@ -122,7 +135,7 @@ def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initia
         
 
         # This is very scuffed. There must be a better way to do this. Too bad!
-        if info and info['observation'] and info['observation']['MobsKilled'] > 0:
+        if info and info['observation'] and 'MobsKilled' in info['observation'] and info['observation']['MobsKilled'] > 0:
           env.agent_host.sendCommand("quit")
           reward = 100
           done = True

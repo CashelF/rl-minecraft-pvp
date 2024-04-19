@@ -5,13 +5,13 @@
     </About>
 
     <ModSettings>
-        <MsPerTick>40</MsPerTick>
+        <MsPerTick>25</MsPerTick>
     </ModSettings>
 
     <ServerSection>
         <ServerInitialConditions>
             <Time>
-                <StartTime>16000</StartTime> <!-- Set time to night to prevent zombie from burning -->
+                <StartTime>13000</StartTime> <!-- Set time to night to prevent zombie from burning -->
                 <AllowPassageOfTime>false</AllowPassageOfTime>
             </Time>
         </ServerInitialConditions>
@@ -35,6 +35,10 @@
             <Placement x="0" y="4" z="0" yaw="90"/>
             <Inventory>
                 <InventoryItem slot="0" type="diamond_sword" quantity="1"/>
+                <InventoryItem slot="1" type="diamond_helmet"/>
+                <InventoryItem slot="2" type="diamond_chestplate"/>
+                <InventoryItem slot="3" type="diamond_leggings"/>
+                <InventoryItem slot="4" type="diamond_boots"/>
             </Inventory>
         </AgentStart>
         <AgentHandlers>
@@ -48,7 +52,7 @@
                 <Mob type="Zombie" reward="5"/>
             </RewardForDamagingEntity>
             <RewardForMissionEnd> 
-                <Reward description="MALMO_AGENT_DIED" reward="-100" />
+                <Reward description="MALMO_AGENT_DIED" reward="-10" />
                 <!-- <Reward description="quit" reward="100" /> -->
 
             </RewardForMissionEnd>
