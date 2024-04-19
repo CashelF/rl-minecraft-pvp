@@ -1,33 +1,36 @@
 # $MALMO_MINECRAFT_ROOT/launchClient.sh -port 10000
-import json
 import random
-import time
 from collections import deque
 
 import marlo
-import numpy as np
 import torch
 import torch.nn as nn
-
-# transforms
 import torchvision.transforms as transforms
-from PIL import Image
 from torch.utils.data import DataLoader
-from torchvision.models import resnet50
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 
-def build_model(num_actions: int, device: str = "cpu"):
-    # Load the model architecture
-    model = resnet50()
+def build_model(num_inputs: int, num_actions: int, device: str = "cpu"):
+  # Fully connected model
+  model = nn.Sequential(
+    nn.Linear(num_inputs, 128),
+    nn.ReLU(),
+    nn.Linear(128, 128),
+    nn.ReLU(),
+    nn.Linear(128, 128),
+    nn.ReLU(),
+    nn.Linear(128, 128),
+    nn.ReLU(),
+    nn.Linear(128, 128),
+    nn.ReLU(),
+    nn.Linear(128, num_actions)
+  )
 
-    # Modify the last layer to output num_actions
-    model.fc = torch.nn.Linear(model.fc.in_features, num_actions)
+  # Send the model to the device
+  model = model.to(device)
 
-    # Send the model to the device
-    model = model.to(device)
-
-    return model
+  return model
 
 
 def initialize_environment(mission_file: str = "mission.xml"):
@@ -42,13 +45,35 @@ def initialize_environment(mission_file: str = "mission.xml"):
 
   return env
 
-def train(env, model: nn.Module, transformations = nn.Identity, episodes: int = 500, gamma: float = 0.9, initial_epsilon: float = 0.5, final_epsilon: float = 0.1, epsilon_decay: float = 0.9, batch_size: int = 64, loss_fn: nn.Module = nn.MSELoss(), device: str = "cpu"):
+def preprocess_observation(observation: dict) -> torch.Tensor:
+  try:
+    # Add agent information
+    feature = [observation['XPos'], observation['YPos'], observation['ZPos'], observation['Pitch'], observation['Yaw'], observation['Life']]
+
+    # Add hostile mob information
+    for entity in observation['entities']:
+      if entity['name'] == 'Zombie':
+        feature.append(entity['x'])
+        feature.append(entity['y'])
+        feature.append(entity['z'])
+        feature.append(entity['pitch'])
+        feature.append(entity['yaw'])
+        feature.append(entity['life'])
+
+    return torch.tensor(feature, dtype=torch.float32)
+  except:
+    return torch.zeros(12, dtype=torch.float32)
+
+def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initial_epsilon: float = 0.9, final_epsilon: float = 0.1, epsilon_decay: float = 0.95, batch_size: int = 64, loss_fn: nn.Module = nn.MSELoss(), device: str = "cpu", log_dir: str = "logs/ResNet50"):
 
   # Set the model to training mode
   model.train()
 
-  # Define 
+  # Define the optimizer
   optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+  # Create a tensorboard writer
+  writer = SummaryWriter(log_dir=log_dir)
 
   # Initialize a doubly ended queue to store training examples
   memory = deque(maxlen=10000)
@@ -60,10 +85,15 @@ def train(env, model: nn.Module, transformations = nn.Identity, episodes: int = 
   for episode in range(episodes):
 
     # Reset the environment
-    state = env.reset()
+    frame = env.reset()
 
-    # Apply transformations
-    state = transformations(state)
+    # First random step
+    action = env.action_space.sample()
+
+    # Step the environment
+    frame, reward, done, info = env.step(action)
+
+    state = preprocess_observation(info['observation'])
 
     # Run the episode to completion
     done = False
@@ -76,16 +106,20 @@ def train(env, model: nn.Module, transformations = nn.Identity, episodes: int = 
             # Send the state to the device
             state = state.to(device)
 
-            action = torch.argmax(model(state.unsqueeze(0))).item()
+            action = torch.argmax(model(state)).item()
 
             # Bring back from the device
             state = state.cpu()
 
         # Step the environment
-        next_state, reward, done, info = env.step(action)
+        frame, reward, done, info = env.step(action)
 
-        # Apply transformations
-        next_state = transformations(next_state)
+        if not info or not info['observation']:
+          next_state = torch.zeros(12, dtype=torch.float32)
+        else:
+          # Preprocess the next state
+          next_state = preprocess_observation(info['observation'])
+        
 
         # This is very scuffed. There must be a better way to do this. Too bad!
         if info and info['observation'] and info['observation']['MobsKilled'] > 0:
@@ -145,10 +179,18 @@ def train(env, model: nn.Module, transformations = nn.Identity, episodes: int = 
         next_states = next_states.cpu()
         dones = dones.cpu()
 
-    # Decay epsilon
-    epsilon = max(final_epsilon, epsilon_decay * epsilon)  
 
     print(f"Episode {episode + 1} Loss: {running_loss / len(memory)}")
+
+
+    # Log the loss
+    writer.add_scalar("Loss", running_loss / len(memory), episode)
+
+    # Log the epsilon
+    writer.add_scalar("Epsilon", epsilon, episode)
+
+    # Decay epsilon
+    epsilon = max(final_epsilon, epsilon_decay * epsilon)  
   env.close()
 
 
@@ -159,18 +201,12 @@ if __name__ == "__main__":
 
   # Determine the device
   device = "cuda" if torch.cuda.is_available() else "cpu"
-
+  print(env.action_space.n)
   # Load the model
-  model = build_model(env.action_space.n, device)
-
-  # Define image transformations
-  transformations = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Resize((150, 200))
-  ])
+  model = build_model(12, env.action_space.n, device)
 
   # Train the model
-  train(env, model, transformations, episodes=100, batch_size=64, device=device)
+  train(env, model, episodes=100, batch_size=64, device=device, log_dir="logs")
 
 
   
