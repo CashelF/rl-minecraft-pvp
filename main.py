@@ -10,21 +10,32 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
+FEATURE_SIZE = 10
+HIDDEN_SIZE = 256
+DROPOUT_PROB = 0.1
 
 def build_model(num_inputs: int, num_actions: int, device: str = "cpu"):
   # Fully connected model
   model = nn.Sequential(
-    nn.Linear(num_inputs, 128),
+    nn.Linear(num_inputs, HIDDEN_SIZE),
     nn.ReLU(),
-    nn.Linear(128, 128),
+    nn.Dropout(DROPOUT_PROB),
+    nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
     nn.ReLU(),
-    nn.Linear(128, 128),
+    nn.Dropout(DROPOUT_PROB),
+    nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
     nn.ReLU(),
-    nn.Linear(128, 128),
+    nn.Dropout(DROPOUT_PROB),
+    nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
     nn.ReLU(),
-    nn.Linear(128, 128),
+    nn.Dropout(DROPOUT_PROB),
+    nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
     nn.ReLU(),
-    nn.Linear(128, num_actions)
+    nn.Dropout(DROPOUT_PROB),
+    nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
+    nn.ReLU(),
+    nn.Dropout(DROPOUT_PROB),
+    nn.Linear(HIDDEN_SIZE, num_actions)
   )
 
   # Send the model to the device
@@ -45,10 +56,13 @@ def initialize_environment(mission_file: str = "mission.xml"):
 
   return env
 
-def preprocess_observation(observation: dict) -> torch.Tensor:
+def preprocess_observation(info: dict) -> torch.Tensor:
   try:
+    # Extract the observation
+    observation = info['observation']
+
     # Add agent information
-    feature = [observation['XPos'], observation['YPos'], observation['ZPos'], observation['Pitch'], observation['Yaw'], observation['Life']]
+    feature = [observation['XPos'], observation['YPos'], observation['ZPos'], observation['Yaw'], observation['Life']]
 
     # Add hostile mob information
     for entity in observation['entities']:
@@ -56,15 +70,17 @@ def preprocess_observation(observation: dict) -> torch.Tensor:
         feature.append(entity['x'])
         feature.append(entity['y'])
         feature.append(entity['z'])
-        feature.append(entity['pitch'])
         feature.append(entity['yaw'])
         feature.append(entity['life'])
 
+    if len(feature) < FEATURE_SIZE:
+      feature += [0] * (FEATURE_SIZE - len(feature))
+
     return torch.tensor(feature, dtype=torch.float32)
   except:
-    return torch.zeros(12, dtype=torch.float32)
+    return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
 
-def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initial_epsilon: float = 0.9, final_epsilon: float = 0.1, epsilon_decay: float = 0.95, batch_size: int = 64, loss_fn: nn.Module = nn.MSELoss(), device: str = "cpu", log_dir: str = "logs/ResNet50"):
+def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initial_epsilon: float = 0.9, final_epsilon: float = 0.1, epsilon_decay: float = 0.99, batch_size: int = 64, loss_fn: nn.Module = nn.MSELoss(), device: str = "cpu", log_dir: str = "logs/ResNet50", output_path: str = "models/model.pt"):
 
   # Set the model to training mode
   model.train()
@@ -95,6 +111,9 @@ def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initia
 
     state = preprocess_observation(info['observation'])
 
+    episode_reward = 0
+    episode_length = 0
+
     # Run the episode to completion
     done = False
     while not done:
@@ -114,18 +133,20 @@ def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initia
         # Step the environment
         frame, reward, done, info = env.step(action)
 
-        if not info or not info['observation']:
-          next_state = torch.zeros(12, dtype=torch.float32)
-        else:
-          # Preprocess the next state
-          next_state = preprocess_observation(info['observation'])
+        # Preprocess the next state
+        next_state = preprocess_observation(info)
         
-
         # This is very scuffed. There must be a better way to do this. Too bad!
-        if info and info['observation'] and info['observation']['MobsKilled'] > 0:
-          env.agent_host.sendCommand("quit")
-          reward = 100
-          done = True
+        try:
+          if info['observation']['MobsKilled'] > 0:
+            env.agent_host.sendCommand("quit")
+            reward = 10
+            done = True
+        except:
+          print("Too bad!")
+
+        episode_reward += reward
+        episode_length += 1
 
         if reward != 0:
            print(f"Reward: {reward}")
@@ -180,8 +201,7 @@ def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initia
         dones = dones.cpu()
 
 
-    print(f"Episode {episode + 1} Loss: {running_loss / len(memory)}")
-
+    print(f"Episode {episode + 1} Loss: {running_loss / len(memory):.2f} Average Reward: {episode_reward/episode_length:.2f}")
 
     # Log the loss
     writer.add_scalar("Loss", running_loss / len(memory), episode)
@@ -189,8 +209,14 @@ def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initia
     # Log the epsilon
     writer.add_scalar("Epsilon", epsilon, episode)
 
+    # Log the reward
+    writer.add_scalar("Reward", episode_reward / episode_length, episode)
+
     # Decay epsilon
     epsilon = max(final_epsilon, epsilon_decay * epsilon)  
+
+    # Save the model
+    torch.save(model.state_dict(), output_path)
   env.close()
 
 
@@ -201,12 +227,11 @@ if __name__ == "__main__":
 
   # Determine the device
   device = "cuda" if torch.cuda.is_available() else "cpu"
-  print(env.action_space.n)
+
   # Load the model
-  model = build_model(12, env.action_space.n, device)
+  model = build_model(FEATURE_SIZE, env.action_space.n, device)
 
   # Train the model
-  train(env, model, episodes=100, batch_size=64, device=device, log_dir="logs")
-
+  train(env, model, episodes=1000, batch_size=64, device=device, output_path="models/model.pt")
 
   
