@@ -1,11 +1,9 @@
-import gym
 import marlo
 from stable_baselines3 import DQN
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.evaluation import evaluate_policy
 from environment import ZombieEnv
-
-
+import os
 
 def initialize_environment(mission_file: str = "mission.xml"):
     # Define the client pool
@@ -17,7 +15,7 @@ def initialize_environment(mission_file: str = "mission.xml"):
     env = ZombieEnv(env)
     return env
 
-if __name__ == "__main__":
+if __name__ == "__main__":    
     # Initialize the environment
     env = initialize_environment()
 
@@ -27,9 +25,15 @@ if __name__ == "__main__":
 
     # Define the policy architecture (can use a custom policy or predefined ones)
     # Here we use a simple Multi-Layer Perceptron with two layers of 256 neurons each
-    model = DQN("MlpPolicy", env, verbose=1, buffer_size=10000, learning_rate=0.0005,
-                batch_size=64, gamma=0.99, exploration_fraction=0.1, exploration_final_eps=0.02, 
-                target_update_interval=1000, train_freq=4, gradient_steps=1, tensorboard_log="./dqn_minecraft_tensorboard/")
+    
+    # model = DQN("MlpPolicy", env, verbose=1, buffer_size=10000, learning_rate=0.0005,
+    #             batch_size=64, gamma=0.99, exploration_fraction=0.1, exploration_final_eps=0.02, 
+    #             target_update_interval=1000, train_freq=4, gradient_steps=1, tensorboard_log="./dqn_minecraft_tensorboard/")
+    
+    # UNCOMMENT WHEN YOU WANT TO LOAD A MODEL
+    # Load the model
+    model_path = os.path.join("models", 'dqn_minecraft_model.zip')  # Adjust 'your_model_name' as necessary
+    model = DQN.load(model_path, env=env)
 
     # Train the model
     model.learn(total_timesteps=25000)

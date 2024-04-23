@@ -18,7 +18,9 @@ class ZombieEnv(gym.Env):
         if action == self.look_at_zombie_action:
             obs, reward, done, info = self.env.step(1) # TODO: is this a no-op aciton?
             look_at_zombie(info['observation'], self.env)
-            reward = 0.01 # Reward for looking at the zombie (shaping reward)
+            zombie_observation = info['observation'].get('entities', [{}])[0] if info['observation'] else {}
+            if zombie_observation:
+                reward = 0.0 # Reward for looking at the zombie (shaping reward)
         else:
             obs, reward, done, info = self.env.step(action)
 

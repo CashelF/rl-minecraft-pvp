@@ -9,6 +9,7 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+from environment import ZombieEnv
 
 FEATURE_SIZE = 10
 HIDDEN_SIZE = 256
@@ -53,10 +54,11 @@ def initialize_environment(mission_file: str = "mission.xml"):
 
   # Initialize the environment (Assuming only one agent)
   env = marlo.init(join_tokens[0])
-
+  env = ZombieEnv(env)
   return env
 
 def preprocess_observation(info: dict) -> torch.Tensor:
+  # TODO: ADD STATE OF LOOKING AT ZOMBIE, break out yaw differential function from options
   try:
     # Extract the observation
     observation = info['observation']
@@ -127,6 +129,10 @@ def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initia
     # Run the episode to completion
     done = False
     while not done:
+        # TODO: implement this >
+        # if env.agent_host.peekWorldState().is_mission_running == False:
+        #   break
+        
         # Select an action
         if random.random() < epsilon: # Random action
             action = env.action_space.sample()
@@ -237,6 +243,8 @@ if __name__ == "__main__":
 
   # Determine the device
   device = "cuda" if torch.cuda.is_available() else "cpu"
+  
+  print(f"Using {device} device")
 
   # Load the model
   model = build_model(FEATURE_SIZE, env.action_space.n, device)
