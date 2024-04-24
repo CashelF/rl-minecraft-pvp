@@ -16,7 +16,7 @@ class ZombieEnv(gym.Env):
         done = False
         reward = 0
         if action == self.look_at_zombie_action:
-            obs, reward, done, info = self.env.step(1) # TODO: is this a no-op aciton?
+            obs, reward, done, info = self.env.step(0) # TODO: is this a no-op aciton?
             look_at_zombie(info['observation'], self.env)
             zombie_observation = info['observation'].get('entities', [{}])[0] if info['observation'] else {}
             if zombie_observation:

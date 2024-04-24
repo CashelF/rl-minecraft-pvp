@@ -10,10 +10,16 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from environment import ZombieEnv
+import threading
+import pickle
 
 FEATURE_SIZE = 10
 HIDDEN_SIZE = 256
 DROPOUT_PROB = 0.1
+
+def save_data_with_pickle(data, filename):
+    with open(filename, 'wb') as f:
+        pickle.dump(data, f)
 
 def build_model(num_inputs: int, num_actions: int, device: str = "cpu"):
   # Fully connected model
@@ -45,9 +51,9 @@ def build_model(num_inputs: int, num_actions: int, device: str = "cpu"):
   return model
 
 
-def initialize_environment(mission_file: str = "mission.xml"):
+def initialize_environment(port, mission_file: str = "mission.xml"):
   # Define the client pool
-  client_pool = [('127.0.0.1', 10000)]
+  client_pool = [('127.0.0.1', port)]
 
   # Create the environment. Whoever made suppress_info default to False, I will find you.
   join_tokens = marlo.make(mission_file, params={"client_pool": client_pool, "suppress_info": False})
@@ -233,23 +239,25 @@ def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initia
 
     # Save the model
     torch.save(model.state_dict(), output_path)
+    
+    save_data_with_pickle(memory, f"trajectories/trajectory_data_episode_{episode}.pkl")
+    
   env.close()
 
+def setup_client(port):
+    env = initialize_environment(port)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = build_model(FEATURE_SIZE, env.action_space.n, device)
+    train(env, model, episodes=1000, batch_size=64, device=device, output_path="models/model.pt")
 
 
 if __name__ == "__main__":
-  # Initialize the environment
-  env = initialize_environment()  
+  ports = [10000, 10001]
+  threads = [threading.Thread(target=setup_client, args=(port,)) for port in ports]
 
-  # Determine the device
-  device = "cuda" if torch.cuda.is_available() else "cpu"
-  
-  print(f"Using {device} device")
-
-  # Load the model
-  model = build_model(FEATURE_SIZE, env.action_space.n, device)
-
-  # Train the model
-  train(env, model, episodes=1000, batch_size=64, device=device, output_path="models/model.pt")
+  for thread in threads:
+      thread.start()
+  for thread in threads:
+      thread.join()
 
   
