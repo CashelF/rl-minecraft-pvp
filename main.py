@@ -1,4 +1,5 @@
 # $MALMO_MINECRAFT_ROOT/launchClient.sh -port 10000
+import math
 import random
 from collections import deque
 
@@ -13,7 +14,7 @@ from environment import ZombieEnv
 import threading
 import pickle
 
-FEATURE_SIZE = 10
+FEATURE_SIZE = 3
 HIDDEN_SIZE = 256
 DROPOUT_PROB = 0.1
 
@@ -56,7 +57,7 @@ def initialize_environment(port, mission_file: str = "mission.xml"):
   client_pool = [('127.0.0.1', port)]
 
   # Create the environment. Whoever made suppress_info default to False, I will find you.
-  join_tokens = marlo.make(mission_file, params={"client_pool": client_pool, "suppress_info": False})
+  join_tokens = marlo.make(mission_file, params={"client_pool": client_pool, "suppress_info": False, 'kill_clients_after_num_rounds': 1000, "videoResolution": [800, 600], "PrioritiseOffscreenRendering": False})
 
   # Initialize the environment (Assuming only one agent)
   env = marlo.init(join_tokens[0])
@@ -69,38 +70,46 @@ def preprocess_observation(info: dict) -> torch.Tensor:
     # Extract the observation
     observation = info['observation']
 
-    # Add agent information
-    feature = [observation['XPos'], observation['YPos'], observation['ZPos'], observation['Yaw'], observation['Life']]
+    # Extract the agent's position
+    x = observation['XPos']
+    z = observation['ZPos']
+    yaw = observation['Yaw']
+
+    if yaw < -180:
+      yaw += 360
+    if yaw > 180:
+      yaw -= 360
 
     # Add hostile mob information
     for entity in observation['entities']:
       if entity['name'] == 'Zombie':
-        feature.append(entity['x'])
-        feature.append(entity['y'])
-        feature.append(entity['z'])
-        feature.append(entity['yaw'])
-        feature.append(entity['life'])
+        dx = entity['x'] - x
+        dz = entity['z'] - z
 
-    if len(feature) < FEATURE_SIZE:
-      feature += [0] * (FEATURE_SIZE - len(feature))
+        distance_to_mob = math.sqrt(dx ** 2 + dz ** 2)
+        yaw_to_mob = -180 * math.atan2(dx, dz) / math.pi
+        
+        feature = [distance_to_mob, yaw_to_mob, yaw]
 
-    return torch.tensor(feature, dtype=torch.float32)
+        return torch.tensor(feature, dtype=torch.float32)
+    
+    print("Failed to find hostile mob")
+
+    return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
   except:
+    print("Failed to find observation")
     return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
 
-def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initial_epsilon: float = 0.9, final_epsilon: float = 0.1, epsilon_decay: float = 0.99, batch_size: int = 64, loss_fn: nn.Module = nn.MSELoss(), device: str = "cpu", log_dir: str = "logs/ResNet50", output_path: str = "models/model.pt"):
-
-  # Set the model to training mode
-  model.train()
+def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initial_epsilon: float = 0.9, final_epsilon: float = 0.1, epsilon_decay: float = 0.995, batch_size: int = 64, loss_fn: nn.Module = nn.MSELoss(), device: str = "cpu", log_dir: str = "logs/", output_path: str = "models/model.pt"):
 
   # Define the optimizer
-  optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+  optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
   # Create a tensorboard writer
   writer = SummaryWriter(log_dir=log_dir)
 
   # Initialize a doubly ended queue to store training examples
-  memory = deque(maxlen=10000)
+  memory = deque(maxlen=50000)
 
   # Initializ epsilon
   epsilon = initial_epsilon
@@ -117,6 +126,9 @@ def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initia
 
   # Run the training loop
   for episode in range(episodes):
+
+    # Set the model to evaluation mode
+    model.eval()
 
     # Reset the environment
     frame = env.reset()
@@ -141,7 +153,7 @@ def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initia
         
         # Select an action
         if random.random() < epsilon: # Random action
-            action = env.action_space.sample()
+          action = env.action_space.sample()
         else: # Action from the model
           with torch.no_grad():
             # Send the state to the device
@@ -157,12 +169,15 @@ def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initia
 
         # Preprocess the next state
         next_state = preprocess_observation(info)
+
+        reward -= abs(next_state[1] - next_state[2]).item() / 180
         
         # This is very scuffed. There must be a better way to do this. Too bad!
         try:
           if info['observation']['MobsKilled'] > 0:
+            print("You killed the zombie!")
             env.agent_host.sendCommand("quit")
-            reward = 10
+            reward = 100
             done = True
         except:
           print("Too bad!")
@@ -170,14 +185,17 @@ def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initia
         episode_reward += reward
         episode_length += 1
 
-        if reward != 0:
-           print(f"Reward: {reward}")
+        # if reward != 0:
+        #    print(f"Reward: {reward}")
 
         # Store the transition
         memory.append((state, action, reward, next_state, done))
 
         # Update the state
         state = next_state
+
+    # Set the model to training mode
+    model.train()
 
     running_loss = 0
 
@@ -223,7 +241,7 @@ def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initia
         dones = dones.cpu()
 
 
-    print(f"Episode {episode + 1} Loss: {running_loss / len(memory):.2f} Average Reward: {episode_reward/episode_length:.2f}")
+    print(f"Episode {episode + 1} Loss: {running_loss / len(memory):.2f} Episode Reward: {episode_reward:.2f}")
 
     # Log the loss
     writer.add_scalar("Loss", running_loss / len(memory), episode)
@@ -232,7 +250,10 @@ def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initia
     writer.add_scalar("Epsilon", epsilon, episode)
 
     # Log the reward
-    writer.add_scalar("Reward", episode_reward / episode_length, episode)
+    writer.add_scalar("Reward", episode_reward, episode)
+
+    # Log the episode length
+    writer.add_scalar("Episode Length", episode_length, episode)
 
     # Decay epsilon
     epsilon = max(final_epsilon, epsilon_decay * epsilon)  
@@ -248,6 +269,8 @@ def setup_client(port):
     env = initialize_environment(port)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = build_model(FEATURE_SIZE, env.action_space.n, device)
+    # Load the weights
+    model.load_state_dict(torch.load("models/best.pt"))
     train(env, model, episodes=1000, batch_size=64, device=device, output_path="models/model.pt")
 
 
