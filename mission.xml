@@ -5,36 +5,42 @@
     </About>
 
     <ModSettings>
-        <MsPerTick>50</MsPerTick>
+        <MsPerTick>25</MsPerTick>
     </ModSettings>
 
     <ServerSection>
         <ServerInitialConditions>
             <Time>
-                <StartTime>16000</StartTime> <!-- Set time to night to prevent zombie from burning -->
+                <StartTime>10000</StartTime> <!-- Set time to night to prevent zombie from burning -->
                 <AllowPassageOfTime>false</AllowPassageOfTime>
             </Time>
         </ServerInitialConditions>
         <ServerHandlers>
             <FlatWorldGenerator generatorString="3;7,2*3,2;1;village"/>
             <DrawingDecorator>
-                <DrawEntity x="-5" y="4" z="0" type="Zombie"/>
-                <DrawCuboid x1="-10" y1="4" z1="-10" x2="10" y2="24" z2="-10" type="glass"/>
-                <DrawCuboid x1="-10" y1="4" z1="10" x2="10" y2="24" z2="10" type="glass"/>
-                <DrawCuboid x1="-10" y1="4" z1="-10" x2="-10" y2="24" z2="10" type="glass"/>
-                <DrawCuboid x1="10" y1="4" z1="-10" x2="10" y2="24" z2="10" type="glass"/>
-                <DrawCuboid x1="-10" y1="25" z1="-10" x2="10" y2="25" z2="10" type="glass"/>
+                <DrawEntity x="0" y="4" z="0" type="Zombie"/>
+                <DrawCuboid x1="-10" y1="4" z1="-10" x2="10" y2="24" z2="-10" type="barrier"/>
+                <DrawCuboid x1="-10" y1="4" z1="10" x2="10" y2="24" z2="10" type="barrier"/>
+                <DrawCuboid x1="-10" y1="4" z1="-10" x2="-10" y2="24" z2="10" type="barrier"/>
+                <DrawCuboid x1="10" y1="4" z1="-10" x2="10" y2="24" z2="10" type="barrier"/>
+                <!-- <DrawCuboid x1="0" y1="11" z1="-10" x2="10" y2="11" z2="10" type="water"/> -->
+                <DrawCuboid x1="-10" y1="25" z1="-10" x2="10" y2="25" z2="10" type="quartz_block"/>
+                <DrawCuboid x1="-10" y1="3" z1="-10" x2="10" y2="3" z2="10" type="sea_lantern"/>
             </DrawingDecorator>
             <ServerQuitWhenAnyAgentFinishes/>
         </ServerHandlers>
     </ServerSection>
   
-    <AgentSection mode="Survival">
+    <AgentSection mode="Adventure">
         <Name>John Wick</Name>
         <AgentStart>
             <Placement x="5" y="4" z="0" yaw="90"/>
             <Inventory>
                 <InventoryItem slot="0" type="diamond_sword" quantity="1"/>
+                <InventoryItem slot="1" type="diamond_helmet"/>
+                <InventoryItem slot="2" type="diamond_chestplate"/>
+                <InventoryItem slot="3" type="diamond_leggings"/>
+                <InventoryItem slot="4" type="diamond_boots"/>
             </Inventory>
         </AgentStart>
         <AgentHandlers>
