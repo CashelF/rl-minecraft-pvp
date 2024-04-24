@@ -34,7 +34,7 @@
     <AgentSection mode="Adventure">
         <Name>John Wick</Name>
         <AgentStart>
-            <Placement x="0" y="4" z="0" yaw="90"/>
+            <Placement x="5" y="4" z="0" yaw="90"/>
             <Inventory>
                 <InventoryItem slot="0" type="diamond_sword" quantity="1"/>
                 <InventoryItem slot="1" type="diamond_helmet"/>
@@ -49,12 +49,11 @@
                 <Range name="entities" xrange="20" yrange="10" zrange="20"/>
             </ObservationFromNearbyEntities>
             <ContinuousMovementCommands/>
-            <!-- <DiscreteMovementCommands/> -->
             <RewardForDamagingEntity>
-                <Mob type="Zombie" reward="1"/>
+                <Mob type="Zombie" reward="10"/>
             </RewardForDamagingEntity>
             <RewardForMissionEnd> 
-                <Reward description="MALMO_AGENT_DIED" reward="-10" />
+                <Reward description="MALMO_AGENT_DIED" reward="-100" />
                 <!-- <Reward description="quit" reward="100" /> -->
 
             </RewardForMissionEnd>
