@@ -18,12 +18,12 @@
         <ServerHandlers>
             <FlatWorldGenerator generatorString="3;7,2*3,2;1;village"/>
             <DrawingDecorator>
-                <DrawCuboid x1="-10" y1="4" z1="-10" x2="10" y2="24" z2="-10" type="barrier"/>
-                <DrawCuboid x1="-10" y1="4" z1="10" x2="10" y2="24" z2="10" type="barrier"/>
-                <DrawCuboid x1="-10" y1="4" z1="-10" x2="-10" y2="24" z2="10" type="barrier"/>
-                <DrawCuboid x1="10" y1="4" z1="-10" x2="10" y2="24" z2="10" type="barrier"/>
-                <DrawCuboid x1="-10" y1="25" z1="-10" x2="10" y2="25" z2="10" type="quartz_block"/>
-                <DrawCuboid x1="-10" y1="3" z1="-10" x2="10" y2="3" z2="10" type="sea_lantern"/>
+                <DrawCuboid x1="-5" y1="4" z1="-5" x2="5" y2="24" z2="-5" type="barrier"/>
+                <DrawCuboid x1="-5" y1="4" z1="5" x2="5" y2="24" z2="5" type="barrier"/>
+                <DrawCuboid x1="-5" y1="4" z1="-5" x2="-5" y2="24" z2="5" type="barrier"/>
+                <DrawCuboid x1="5" y1="4" z1="-5" x2="5" y2="24" z2="5" type="barrier"/>
+                <DrawCuboid x1="-5" y1="25" z1="-5" x2="5" y2="25" z2="5" type="quartz_block"/>
+                <DrawCuboid x1="-5" y1="3" z1="-5" x2="5" y2="3" z2="5" type="sea_lantern"/>
             </DrawingDecorator>
             <ServerQuitWhenAnyAgentFinishes/>
         </ServerHandlers>
@@ -32,7 +32,7 @@
     <AgentSection mode="Adventure">
         <Name>Cashel</Name>
         <AgentStart>
-            <Placement x="-5" y="4" z="0" yaw="270"/>
+            <Placement x="-3" y="4" z="0" yaw="270"/>
             <Inventory>
                 <InventoryItem slot="0" type="diamond_sword" quantity="1"/>
             </Inventory>
@@ -57,7 +57,7 @@
     <AgentSection mode="Adventure">
         <Name>Troy</Name>
         <AgentStart>
-            <Placement x="5" y="4" z="0" yaw="90"/>
+            <Placement x="3" y="4" z="0" yaw="90"/>
             <Inventory>
                 <InventoryItem slot="0" type="diamond_sword" quantity="1"/>
             </Inventory>

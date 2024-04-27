@@ -141,6 +141,9 @@ def train(
         frame, reward, done, info = env.step(action)
 
         state = preprocess_observation(info)
+        
+        current_damage_dealt = 0
+        current_damage_taken = 0
 
         episode_reward = 0
         episode_length = 0
@@ -169,11 +172,20 @@ def train(
 
             # This is very scuffed. There must be a better way to do this. Too bad!
             try:
+                if info["observation"]["DamageDealt"] > current_damage_dealt:
+                    reward += info["observation"]["DamageDealt"] - current_damage_dealt
+                    current_damage_dealt = info["observation"]["DamageDealt"]
+                    
+                if info["observation"]["DamageTaken"] > current_damage_taken:
+                    reward -= info["observation"]["DamageTaken"] - current_damage_taken
+                    current_damage_taken = info["observation"]["DamageTaken"]
+                
                 if info["observation"]["PlayersKilled"] > 0:
                     print(f"{info['observation']['Name']} killed the enemy!")
                     env.agent_host.sendCommand("quit")
                     reward = 100
                     done = True
+                    
             except:
                 print("Too bad!")
 
