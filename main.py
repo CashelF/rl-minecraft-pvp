@@ -1,3 +1,4 @@
+import datetime
 import math
 import os
 import pickle
@@ -10,9 +11,6 @@ import torch
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
-import datetime
-import os
-
 
 FEATURE_SIZE = 7
 HIDDEN_SIZE = 256
@@ -77,9 +75,18 @@ def preprocess_observation(info):
                 distance_to_enemy = math.sqrt(dx**2 + dz**2)
 
                 yaw_to_enemy = -180 * math.atan2(dx, dz) / math.pi
+                
+                yaw_delta = yaw - yaw_to_enemy
+
+                if yaw_delta > 180:
+                    yaw_delta -= 360
+                elif yaw_delta < -180:
+                    yaw_delta += 360
+
+                yaw_delta
 
                 features = torch.tensor(
-                    [x, z, yaw, life, distance_to_enemy, yaw_to_enemy - yaw, enemy_life],
+                    [x, z, yaw, life, distance_to_enemy, yaw_delta, enemy_life],
                     dtype=torch.float32,
                 )
 
@@ -301,7 +308,7 @@ if __name__ == "__main__":
             "client_pool": client_pool,
             "suppress_info": False,
             "kill_clients_after_num_rounds": 9999,
-            "videoResolution": [800, 600],
+            "videoResolution": [400, 300],
             "PrioritiesOffscreenRendering": False,
         },
     )
