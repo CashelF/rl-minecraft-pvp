@@ -1,6 +1,7 @@
 import math
 import pickle
 import random
+import threading
 from collections import deque
 
 import marlo
@@ -12,7 +13,7 @@ from tqdm import tqdm
 
 FEATURE_SIZE = 3
 HIDDEN_SIZE = 256
-DROPOUT_PROB = 0.1
+DROPOUT_PROB = 0.4
 
 
 def save_data_with_pickle(data, filename):
@@ -34,7 +35,7 @@ def build_model(num_inputs: int, num_actions: int):
     return model
 
 
-def preprocess_observation(info: dict):
+def preprocess_observation(info):
     try:
         observation = info["observation"]
 
@@ -95,6 +96,8 @@ def train(
 
     # Run the training loop
     for episode in range(episodes):
+        print(f"Starting Episode({threading.current_thread()})")
+
         # Set the model to evaluation mode
         model.eval()
 
@@ -107,7 +110,7 @@ def train(
         # Step the environment
         frame, reward, done, info = env.step(action)
 
-        state = preprocess_observation(info["observation"])
+        state = preprocess_observation(info)
 
         episode_reward = 0
         episode_length = 0
@@ -128,6 +131,7 @@ def train(
                     # Bring back from the device
                     state = state.cpu()
 
+            
             # Step the environment
             frame, reward, done, info = env.step(action)
 
@@ -154,6 +158,8 @@ def train(
             state = next_state
 
         if can_train:
+            print(f"Started Training({threading.current_thread()})")
+
             # Set the model to training mode
             model.train()
 
@@ -189,7 +195,7 @@ def train(
                 expected_q_values = expected_q_values.float()
 
                 # Compute the loss
-                loss = loss_fn(current_q_values, expected_q_values)
+                loss: torch.Tensor = loss_fn(current_q_values, expected_q_values)
 
                 # Tally the loss
                 running_loss += loss.item()
