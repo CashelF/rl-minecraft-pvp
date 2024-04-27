@@ -1,6 +1,7 @@
 import math
 import pickle
 import random
+import threading
 from collections import deque
 
 import marlo
@@ -12,7 +13,7 @@ from tqdm import tqdm
 
 FEATURE_SIZE = 3
 HIDDEN_SIZE = 256
-DROPOUT_PROB = 0.1
+DROPOUT_PROB = 0.4
 
 
 def save_data_with_pickle(data, filename):
@@ -34,7 +35,7 @@ def build_model(num_inputs: int, num_actions: int):
     return model
 
 
-def preprocess_observation(info: dict):
+def preprocess_observation(info):
     try:
         observation = info["observation"]
 
@@ -59,7 +60,7 @@ def preprocess_observation(info: dict):
                 )
             
         return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
-    except KeyError:
+    except:
         return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
 
 
@@ -97,6 +98,8 @@ def train(
 
     # Run the training loop
     for episode in range(episodes):
+        print(f"Starting Episode({threading.current_thread()})")
+
         # Set the model to evaluation mode
         model.eval()
 
@@ -109,7 +112,7 @@ def train(
         # Step the environment
         frame, reward, done, info = env.step(action)
 
-        state = preprocess_observation(info["observation"])
+        state = preprocess_observation(info)
 
         episode_reward = 0
         episode_length = 0
@@ -130,6 +133,7 @@ def train(
                     # Bring back from the device
                     state = state.cpu()
 
+            
             # Step the environment
             frame, reward, done, info = env.step(action)
 
@@ -156,6 +160,8 @@ def train(
             state = next_state
 
         if can_train:
+            print(f"Started Training({threading.current_thread()})")
+
             # Set the model to training mode
             model.train()
 
@@ -191,7 +197,7 @@ def train(
                 expected_q_values = expected_q_values.float()
 
                 # Compute the loss
-                loss = loss_fn(current_q_values, expected_q_values)
+                loss: torch.Tensor = loss_fn(current_q_values, expected_q_values)
 
                 # Tally the loss
                 running_loss += loss.item()
@@ -208,32 +214,32 @@ def train(
                 next_states = next_states.cpu()
                 dones = dones.cpu()
 
-        print(
-            f"Episode {episode + 1} Loss: {running_loss / episode_length:.2f} Episode Reward: {episode_reward:.2f}"
-        )
+            print(
+                f"Episode {episode + 1} Loss: {running_loss / episode_length:.2f} Episode Reward: {episode_reward:.2f}"
+            )
 
-        # Log the loss
-        writer.add_scalar("Loss", running_loss / episode_length, episode)
+            # Log the loss
+            writer.add_scalar("Loss", running_loss / episode_length, episode)
 
-        # Log the epsilon
-        writer.add_scalar("Epsilon", epsilon, episode)
+            # Log the epsilon
+            writer.add_scalar("Epsilon", epsilon, episode)
 
-        # Log the reward
-        writer.add_scalar("Reward", episode_reward, episode)
+            # Log the reward
+            writer.add_scalar("Reward", episode_reward, episode)
 
-        # Log the episode length
-        writer.add_scalar("Episode Length", episode_length, episode)
+            # Log the episode length
+            writer.add_scalar("Episode Length", episode_length, episode)
 
-        # Decay epsilon
-        epsilon = max(final_epsilon, epsilon_decay * epsilon)
+            # Decay epsilon
+            epsilon = max(final_epsilon, epsilon_decay * epsilon)
 
-        # Save the model
-        torch.save(model.state_dict(), output_path)
+            # Save the model
+            torch.save(model.state_dict(), output_path)
 
-        # Save the memory
-        save_data_with_pickle(
-            memory, f"trajectories/trajectory_data_episode_{episode}.pkl"
-        )
+            # Save the memory
+            save_data_with_pickle(
+                memory, f"trajectories/trajectory_data_episode_{episode}.pkl"
+            )
 
 
 @marlo.threaded
