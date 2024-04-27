@@ -1,4 +1,5 @@
 import math
+import os
 import pickle
 import random
 import threading
@@ -7,9 +8,7 @@ from collections import deque
 import marlo
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
 
 FEATURE_SIZE = 3
 HIDDEN_SIZE = 256
@@ -66,7 +65,7 @@ def preprocess_observation(info):
 
 def train(
     env,
-    memory,
+    memory: deque,
     model: nn.Module,
     episodes: int = 500,
     gamma: float = 0.9,
@@ -76,7 +75,8 @@ def train(
     batch_size: int = 64,
     loss_fn: nn.Module = nn.MSELoss(),
     log_dir: str = "logs/",
-    output_path: str = "models/model.pt",
+    model_dir: str = "models/",
+    trajectory_dir: str = "trajectories/",
     can_train: bool = False,
 ):
     # Define the optimizer
@@ -84,6 +84,10 @@ def train(
 
     # Create a tensorboard writer
     writer = SummaryWriter(log_dir=log_dir)
+
+    # Ensure the output directories exist
+    os.makedirs(model_dir, exist_ok=True)
+    os.makedirs(trajectory_dir, exist_ok=True)
 
     # Initialize epsilon
     epsilon = initial_epsilon
@@ -96,8 +100,6 @@ def train(
 
     # Run the training loop
     for episode in range(episodes):
-        print(f"Starting Episode({threading.current_thread()})")
-
         # Set the model to evaluation mode
         model.eval()
 
@@ -158,8 +160,6 @@ def train(
             state = next_state
 
         if can_train:
-            print(f"Started Training({threading.current_thread()})")
-
             # Set the model to training mode
             model.train()
 
@@ -232,11 +232,11 @@ def train(
             epsilon = max(final_epsilon, epsilon_decay * epsilon)
 
             # Save the model
-            torch.save(model.state_dict(), output_path)
+            torch.save(model.state_dict(), os.path.join(model_dir, "model.pt"))
 
             # Save the memory
             save_data_with_pickle(
-                memory, f"trajectories/trajectory_data_episode_{episode}.pkl"
+                memory, os.path.join(trajectory_dir, f"trajectory_data_episode_{episode}.pkl")
             )
 
 
@@ -273,14 +273,14 @@ if __name__ == "__main__":
     model = build_model(FEATURE_SIZE, 9)
     
     # Initialize the memory
-    experienceReplay = deque(maxlen=10000)
+    memory = deque(maxlen=10000)
 
     print("Starting Agents")
 
     threads = []
 
-    threads.append(start_agent(join_tokens[0], experienceReplay, model, can_train=True)[0])
-    threads.append(start_agent(join_tokens[1], experienceReplay, model)[0])
+    threads.append(start_agent(join_tokens[0], memory, model, can_train=True)[0])
+    threads.append(start_agent(join_tokens[1], memory, model)[0])
 
     # Wait for training to finish
     for thread in threads:
