@@ -79,7 +79,7 @@ def preprocess_observation(info):
                 yaw_to_enemy = -180 * math.atan2(dx, dz) / math.pi
 
                 features = torch.tensor(
-                    [x, z, yaw, life, distance_to_enemy, yaw_to_enemy, enemy_life],
+                    [x, z, yaw, life, distance_to_enemy, yaw_to_enemy - yaw, enemy_life],
                     dtype=torch.float32,
                 )
 
@@ -173,11 +173,11 @@ def train(
             # This is very scuffed. There must be a better way to do this. Too bad!
             try:
                 if info["observation"]["DamageDealt"] > current_damage_dealt:
-                    reward += info["observation"]["DamageDealt"] - current_damage_dealt
+                    reward += (info["observation"]["DamageDealt"] - current_damage_dealt) / 10
                     current_damage_dealt = info["observation"]["DamageDealt"]
                     
                 if info["observation"]["DamageTaken"] > current_damage_taken:
-                    reward -= info["observation"]["DamageTaken"] - current_damage_taken
+                    reward -= (info["observation"]["DamageTaken"] - current_damage_taken) / 10
                     current_damage_taken = info["observation"]["DamageTaken"]
                 
                 if info["observation"]["PlayersKilled"] > 0:
