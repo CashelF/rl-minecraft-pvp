@@ -16,6 +16,12 @@
             </Time>
         </ServerInitialConditions>
         <ServerHandlers>
+            <!-- <Multiplayer mode="true">
+                <ServerPool>
+                    <Server address="127.0.0.1" port="10000"/>
+                    <Server address="127.0.0.1" port="10001"/>
+                </ServerPool>
+            </Multiplayer> -->
             <FlatWorldGenerator generatorString="3;7,2*3,2;1;village"/>
             <DrawingDecorator>
                 <DrawEntity x="0" y="4" z="0" type="Zombie"/>
@@ -32,7 +38,7 @@
     </ServerSection>
   
     <AgentSection mode="Adventure">
-        <Name>John Wick</Name>
+        <Name>Cashel</Name>
         <AgentStart>
             <Placement x="5" y="4" z="0" yaw="90"/>
             <Inventory>
@@ -44,6 +50,44 @@
             </Inventory>
         </AgentStart>
         <AgentHandlers>
+            <VideoProducer>
+                <Width>800</Width>
+                <Height>600</Height>
+            </VideoProducer>
+            <ObservationFromFullStats/>
+            <ObservationFromNearbyEntities>
+                <Range name="entities" xrange="20" yrange="10" zrange="20"/>
+            </ObservationFromNearbyEntities>
+            <ContinuousMovementCommands/>
+            <RewardForDamagingEntity>
+                <Mob type="Zombie" reward="10"/>
+            </RewardForDamagingEntity>
+            <RewardForMissionEnd> 
+                <Reward description="MALMO_AGENT_DIED" reward="-100" />
+                <!-- <Reward description="quit" reward="100" /> -->
+
+            </RewardForMissionEnd>
+            <MissionQuitCommands quitDescription="quit"/>
+        </AgentHandlers>
+    </AgentSection>
+
+    <AgentSection mode="Adventure">
+        <Name>Troy</Name>
+        <AgentStart>
+            <Placement x="5" y="4" z="0" yaw="90"/>
+            <Inventory>
+                <InventoryItem slot="0" type="diamond_sword" quantity="1"/>
+                <InventoryItem slot="1" type="diamond_helmet"/>
+                <InventoryItem slot="2" type="diamond_chestplate"/>
+                <InventoryItem slot="3" type="diamond_leggings"/>
+                <InventoryItem slot="4" type="diamond_boots"/>
+            </Inventory>
+        </AgentStart>
+        <AgentHandlers>
+            <VideoProducer>
+                <Width>800</Width>
+                <Height>600</Height>
+            </VideoProducer>
             <ObservationFromFullStats/>
             <ObservationFromNearbyEntities>
                 <Range name="entities" xrange="20" yrange="10" zrange="20"/>
