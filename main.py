@@ -10,15 +10,32 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+import datetime
+import os
+
 
 FEATURE_SIZE = 3
 HIDDEN_SIZE = 256
 DROPOUT_PROB = 0.4
 
+def get_new_filename():
+    """Generate a unique filename using the current timestamp."""
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    return f"trajectories/trajectory_data_{timestamp}.pkl"
 
-def save_data_with_pickle(data, filename):
-    with open(filename, "wb") as f:
-        pickle.dump(data, f)
+trajectory_filename = get_new_filename()
+
+
+def save_trajectory(filename, trajectory):
+    """Save the complete trajectory list to a binary file using pickle."""
+    with open(filename, 'wb') as file:  # 'wb' for writing in binary
+        pickle.dump(trajectory, file)
+
+def load_trajectory_data(filename):
+    """Load the entire list of trajectory data from a pickle file."""
+    with open(filename, 'rb') as file:
+        trajectory = pickle.load(file)
+    return trajectory
 
 
 def build_model(num_inputs: int, num_actions: int):
@@ -67,6 +84,7 @@ def preprocess_observation(info):
 def train(
     env,
     memory,
+    trajectories,
     model: nn.Module,
     episodes: int = 500,
     gamma: float = 0.9,
@@ -153,6 +171,9 @@ def train(
 
             # Store the transition
             memory.append((state, action, reward, next_state, done))
+            
+            # Add trajectory
+            trajectories.append((state, action, reward, next_state, done))
 
             # Update the state
             state = next_state
@@ -165,7 +186,7 @@ def train(
 
             running_loss = 0
 
-            for i in range(episode_length):
+            for i in tqdm(range(episode_length)):
                 # Sample a batch from the memory
                 batch = random.sample(memory, min(batch_size, len(memory)))
 
@@ -230,23 +251,21 @@ def train(
 
             # Decay epsilon
             epsilon = max(final_epsilon, epsilon_decay * epsilon)
+            
+            # Save the trajectory data
+            save_trajectory(trajectory_filename, trajectories)
 
             # Save the model
             torch.save(model.state_dict(), output_path)
 
-            # Save the memory
-            save_data_with_pickle(
-                memory, f"trajectories/trajectory_data_episode_{episode}.pkl"
-            )
-
 
 @marlo.threaded
-def start_agent(join_token, memory, model: nn.Module, can_train: bool = False):
+def start_agent(join_token, memory, trajectories, model: nn.Module, can_train: bool = False):
     # Initialize the environment
     env = marlo.init(join_token)
 
     # Train for 100 episodes
-    train(env, memory, model, episodes=100, can_train=can_train)
+    train(env, memory, trajectories, model, episodes=100, can_train=can_train)
 
     # Close the environment
     env.close()
@@ -274,13 +293,15 @@ if __name__ == "__main__":
     
     # Initialize the memory
     experienceReplay = deque(maxlen=10000)
+    
+    trajectories = []
 
     print("Starting Agents")
 
     threads = []
 
-    threads.append(start_agent(join_tokens[0], experienceReplay, model, can_train=True)[0])
-    threads.append(start_agent(join_tokens[1], experienceReplay, model)[0])
+    threads.append(start_agent(join_tokens[0], experienceReplay, trajectories, model, can_train=True)[0])
+    threads.append(start_agent(join_tokens[1], experienceReplay, trajectories, model)[0])
 
     # Wait for training to finish
     for thread in threads:
