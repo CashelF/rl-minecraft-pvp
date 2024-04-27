@@ -59,12 +59,13 @@ def preprocess_observation(info: dict):
                 )
             
         return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
-    except KeyError:
+    except:
         return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
 
 
 def train(
     env,
+    memory,
     model: nn.Module,
     episodes: int = 500,
     gamma: float = 0.9,
@@ -82,9 +83,6 @@ def train(
 
     # Create a tensorboard writer
     writer = SummaryWriter(log_dir=log_dir)
-
-    # Initialize a doubly ended queue to store training examples
-    memory = deque(maxlen=50000)
 
     # Initialize epsilon
     epsilon = initial_epsilon
@@ -208,41 +206,41 @@ def train(
                 next_states = next_states.cpu()
                 dones = dones.cpu()
 
-        print(
-            f"Episode {episode + 1} Loss: {running_loss / episode_length:.2f} Episode Reward: {episode_reward:.2f}"
-        )
+            print(
+                f"Episode {episode + 1} Loss: {running_loss / episode_length:.2f} Episode Reward: {episode_reward:.2f}"
+            )
 
-        # Log the loss
-        writer.add_scalar("Loss", running_loss / episode_length, episode)
+            # Log the loss
+            writer.add_scalar("Loss", running_loss / episode_length, episode)
 
-        # Log the epsilon
-        writer.add_scalar("Epsilon", epsilon, episode)
+            # Log the epsilon
+            writer.add_scalar("Epsilon", epsilon, episode)
 
-        # Log the reward
-        writer.add_scalar("Reward", episode_reward, episode)
+            # Log the reward
+            writer.add_scalar("Reward", episode_reward, episode)
 
-        # Log the episode length
-        writer.add_scalar("Episode Length", episode_length, episode)
+            # Log the episode length
+            writer.add_scalar("Episode Length", episode_length, episode)
 
-        # Decay epsilon
-        epsilon = max(final_epsilon, epsilon_decay * epsilon)
+            # Decay epsilon
+            epsilon = max(final_epsilon, epsilon_decay * epsilon)
 
-        # Save the model
-        torch.save(model.state_dict(), output_path)
+            # Save the model
+            torch.save(model.state_dict(), output_path)
 
-        # Save the memory
-        save_data_with_pickle(
-            memory, f"trajectories/trajectory_data_episode_{episode}.pkl"
-        )
+            # Save the memory
+            save_data_with_pickle(
+                memory, f"trajectories/trajectory_data_episode_{episode}.pkl"
+            )
 
 
 @marlo.threaded
-def start_agent(join_token, model: nn.Module, can_train: bool = False):
+def start_agent(join_token, memory, model: nn.Module, can_train: bool = False):
     # Initialize the environment
     env = marlo.init(join_token)
 
     # Train for 100 episodes
-    train(env, model, episodes=100, can_train=can_train)
+    train(env, memory, model, episodes=100, can_train=can_train)
 
     # Close the environment
     env.close()
@@ -267,13 +265,16 @@ if __name__ == "__main__":
 
     # Build the model
     model = build_model(FEATURE_SIZE, 9)
+    
+    # Initialize the memory
+    experienceReplay = deque(maxlen=10000)
 
     print("Starting Agents")
 
     threads = []
 
-    threads.append(start_agent(join_tokens[0], model, can_train=True)[0])
-    threads.append(start_agent(join_tokens[1], model)[0])
+    threads.append(start_agent(join_tokens[0], experienceReplay, model, can_train=True)[0])
+    threads.append(start_agent(join_tokens[1], experienceReplay, model)[0])
 
     # Wait for training to finish
     for thread in threads:
