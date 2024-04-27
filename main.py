@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 
-FEATURE_SIZE = 3
+FEATURE_SIZE = 7
 HIDDEN_SIZE = 256
 DROPOUT_PROB = 0.4
 
@@ -49,15 +49,24 @@ def preprocess_observation(info):
         yaw = yaw + 360 if yaw < -180 else yaw - 360 if yaw > 180 else yaw
 
         for entity in observation["entities"]:
-            if entity["name"] == "Zombie":
-                dx, dz = entity["x"] - x, entity["z"] - z
-                distance_to_mob = math.sqrt(dx**2 + dz**2)
-                yaw_to_mob = -180 * math.atan2(dx, dz) / math.pi
-                
-                return torch.tensor(
-                    [distance_to_mob, yaw_to_mob, yaw], dtype=torch.float32
+            if entity["name"] != observation["Name"]:
+                # Extract the enemy's position and life
+                enemy_x, enemy_z, enemy_life = entity["x"], entity["z"], entity["life"]
+
+                # Calculate the distance & angle to the enemy
+                dx, dz = enemy_x - x, enemy_z - z
+
+                distance_to_enemy = math.sqrt(dx**2 + dz**2)
+
+                yaw_to_enemy = -180 * math.atan2(dx, dz) / math.pi
+
+                features = torch.tensor(
+                    [x, z, yaw, life, distance_to_enemy, yaw_to_enemy, enemy_life],
+                    dtype=torch.float32,
                 )
-            
+
+                return features
+
         return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
     except:
         return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
@@ -133,7 +142,6 @@ def train(
                     # Bring back from the device
                     state = state.cpu()
 
-            
             # Step the environment
             frame, reward, done, info = env.step(action)
 
@@ -142,8 +150,8 @@ def train(
 
             # This is very scuffed. There must be a better way to do this. Too bad!
             try:
-                if info["observation"]["MobsKilled"] > 0:
-                    print("You killed the zombie!")
+                if info["observation"]["PlayersKilled"] > 0:
+                    print(f"{info['observation']['Name']} killed the enemy!")
                     env.agent_host.sendCommand("quit")
                     reward = 100
                     done = True
@@ -158,6 +166,8 @@ def train(
 
             # Update the state
             state = next_state
+
+        print(f"Episode Reward({threading.current_thread()}): {episode_reward:.2f}")
 
         if can_train:
             # Set the model to training mode
@@ -212,10 +222,6 @@ def train(
                 next_states = next_states.cpu()
                 dones = dones.cpu()
 
-            print(
-                f"Episode {episode + 1} Loss: {running_loss / episode_length:.2f} Episode Reward: {episode_reward:.2f}"
-            )
-
             # Log the loss
             writer.add_scalar("Loss", running_loss / episode_length, episode)
 
@@ -236,7 +242,8 @@ def train(
 
             # Save the memory
             save_data_with_pickle(
-                memory, os.path.join(trajectory_dir, f"trajectory_data_episode_{episode}.pkl")
+                memory,
+                os.path.join(trajectory_dir, f"trajectory_data_episode_{episode}.pkl"),
             )
 
 
@@ -253,14 +260,16 @@ def start_agent(join_token, memory, model: nn.Module, can_train: bool = False):
 
 
 if __name__ == "__main__":
+    # Define the client pool
     client_pool = [("127.0.0.1", 10000), ("127.0.0.1", 10001)]
+
     # Create the environment
     join_tokens = marlo.make(
         "mission.xml",
         params={
             "client_pool": client_pool,
             "suppress_info": False,
-            "kill_clients_after_num_rounds": 1000,
+            "kill_clients_after_num_rounds": 9999,
             "videoResolution": [800, 600],
             "PrioritiesOffscreenRendering": False,
         },
@@ -271,7 +280,7 @@ if __name__ == "__main__":
 
     # Build the model
     model = build_model(FEATURE_SIZE, 9)
-    
+
     # Initialize the memory
     memory = deque(maxlen=10000)
 
