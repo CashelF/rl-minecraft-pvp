@@ -11,25 +11,17 @@
     <ServerSection>
         <ServerInitialConditions>
             <Time>
-                <StartTime>10000</StartTime> <!-- Set time to night to prevent zombie from burning -->
+                <StartTime>10000</StartTime>
                 <AllowPassageOfTime>false</AllowPassageOfTime>
             </Time>
         </ServerInitialConditions>
         <ServerHandlers>
-            <!-- <Multiplayer mode="true">
-                <ServerPool>
-                    <Server address="127.0.0.1" port="10000"/>
-                    <Server address="127.0.0.1" port="10001"/>
-                </ServerPool>
-            </Multiplayer> -->
             <FlatWorldGenerator generatorString="3;7,2*3,2;1;village"/>
             <DrawingDecorator>
-                <DrawEntity x="0" y="4" z="0" type="Zombie"/>
                 <DrawCuboid x1="-10" y1="4" z1="-10" x2="10" y2="24" z2="-10" type="barrier"/>
                 <DrawCuboid x1="-10" y1="4" z1="10" x2="10" y2="24" z2="10" type="barrier"/>
                 <DrawCuboid x1="-10" y1="4" z1="-10" x2="-10" y2="24" z2="10" type="barrier"/>
                 <DrawCuboid x1="10" y1="4" z1="-10" x2="10" y2="24" z2="10" type="barrier"/>
-                <!-- <DrawCuboid x1="0" y1="11" z1="-10" x2="10" y2="11" z2="10" type="water"/> -->
                 <DrawCuboid x1="-10" y1="25" z1="-10" x2="10" y2="25" z2="10" type="quartz_block"/>
                 <DrawCuboid x1="-10" y1="3" z1="-10" x2="10" y2="3" z2="10" type="sea_lantern"/>
             </DrawingDecorator>
@@ -40,13 +32,9 @@
     <AgentSection mode="Adventure">
         <Name>Cashel</Name>
         <AgentStart>
-            <Placement x="5" y="4" z="0" yaw="90"/>
+            <Placement x="-5" y="4" z="0" yaw="270"/>
             <Inventory>
                 <InventoryItem slot="0" type="diamond_sword" quantity="1"/>
-                <InventoryItem slot="1" type="diamond_helmet"/>
-                <InventoryItem slot="2" type="diamond_chestplate"/>
-                <InventoryItem slot="3" type="diamond_leggings"/>
-                <InventoryItem slot="4" type="diamond_boots"/>
             </Inventory>
         </AgentStart>
         <AgentHandlers>
@@ -59,13 +47,8 @@
                 <Range name="entities" xrange="20" yrange="10" zrange="20"/>
             </ObservationFromNearbyEntities>
             <ContinuousMovementCommands/>
-            <RewardForDamagingEntity>
-                <Mob type="Zombie" reward="10"/>
-            </RewardForDamagingEntity>
             <RewardForMissionEnd> 
-                <Reward description="MALMO_AGENT_DIED" reward="-100" />
-                <!-- <Reward description="quit" reward="100" /> -->
-
+                <Reward description="quit" reward="-100" />
             </RewardForMissionEnd>
             <MissionQuitCommands quitDescription="quit"/>
         </AgentHandlers>
@@ -77,10 +60,6 @@
             <Placement x="5" y="4" z="0" yaw="90"/>
             <Inventory>
                 <InventoryItem slot="0" type="diamond_sword" quantity="1"/>
-                <InventoryItem slot="1" type="diamond_helmet"/>
-                <InventoryItem slot="2" type="diamond_chestplate"/>
-                <InventoryItem slot="3" type="diamond_leggings"/>
-                <InventoryItem slot="4" type="diamond_boots"/>
             </Inventory>
         </AgentStart>
         <AgentHandlers>
@@ -93,13 +72,8 @@
                 <Range name="entities" xrange="20" yrange="10" zrange="20"/>
             </ObservationFromNearbyEntities>
             <ContinuousMovementCommands/>
-            <RewardForDamagingEntity>
-                <Mob type="Zombie" reward="10"/>
-            </RewardForDamagingEntity>
             <RewardForMissionEnd> 
-                <Reward description="MALMO_AGENT_DIED" reward="-100" />
-                <!-- <Reward description="quit" reward="100" /> -->
-
+                <Reward description="quit" reward="-100" />
             </RewardForMissionEnd>
             <MissionQuitCommands quitDescription="quit"/>
         </AgentHandlers>
