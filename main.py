@@ -19,235 +19,230 @@ def save_data_with_pickle(data, filename):
     with open(filename, "wb") as f:
         pickle.dump(data, f)
 
-<<<<<<< HEAD
 
-def build_model(num_inputs: int, num_actions: int, device: str = "cpu") -> nn.Module:
-=======
 def build_model(num_inputs: int, num_actions: int):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
->>>>>>> 5a94b5a1b1ff0693a8960b7408e6a86c297b68d2
     model = nn.Sequential(
         nn.Linear(num_inputs, HIDDEN_SIZE),
         nn.ReLU(),
         nn.Dropout(DROPOUT_PROB),
-        nn.Linear(num_inputs, HIDDEN_SIZE),
+        nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
         nn.ReLU(),
         nn.Dropout(DROPOUT_PROB),
         nn.Linear(HIDDEN_SIZE, num_actions),
     )
 
-    return model.to(device)
+    return model
 
 
 def preprocess_observation(info: dict):
     try:
         observation = info["observation"]
 
-        x, z, yaw, life = observation["XPos"], observation["ZPos"], observation["Yaw"], observation["Life"]
+        x, z, yaw, life = (
+            observation["XPos"],
+            observation["ZPos"],
+            observation["Yaw"],
+            observation["Life"],
+        )
 
         # Bound yaw between -180 and 180
         yaw = yaw + 360 if yaw < -180 else yaw - 360 if yaw > 180 else yaw
 
-        
         for entity in observation["entities"]:
             if entity["name"] == "Zombie":
                 dx, dz = entity["x"] - x, entity["z"] - z
                 distance_to_mob = math.sqrt(dx**2 + dz**2)
                 yaw_to_mob = -180 * math.atan2(dx, dz) / math.pi
+                
                 return torch.tensor(
                     [distance_to_mob, yaw_to_mob, yaw], dtype=torch.float32
                 )
+            
         return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
     except KeyError:
         return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
 
-<<<<<<< HEAD
 
-def train(env, model: nn.Module, episodes: int = 100, device: str = "cpu"):
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    loss_fn = nn.MSELoss()
+def train(
+    env,
+    model: nn.Module,
+    episodes: int = 500,
+    gamma: float = 0.9,
+    initial_epsilon: float = 0.9,
+    final_epsilon: float = 0.1,
+    epsilon_decay: float = 0.995,
+    batch_size: int = 64,
+    loss_fn: nn.Module = nn.MSELoss(),
+    log_dir: str = "logs/",
+    output_path: str = "models/model.pt",
+    can_train: bool = False,
+):
+    # Define the optimizer
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+
+    # Create a tensorboard writer
+    writer = SummaryWriter(log_dir=log_dir)
+
+    # Initialize a doubly ended queue to store training examples
+    memory = deque(maxlen=50000)
+
+    # Initialize epsilon
+    epsilon = initial_epsilon
+
+    # Set the device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Send the model to the device
+    model.to(device)
+
+    # Run the training loop
     for episode in range(episodes):
-        state = env.reset()
-        done = False
-        while not done:
-            action = env.action_space.sample()  # Replace with a better policy
-            next_state, reward, done, _ = env.step(action)
-            loss = loss_fn(
-                model(state), model(next_state)
-            )  # Simplified loss calculation
-=======
-@marlo.threaded
-def agent_thread(join_token, model, can_train=False):
-    env = marlo.init(join_token)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    train(env, model, episodes=100, device=device, can_train=can_train)
-    env.close()
+        # Set the model to evaluation mode
+        model.eval()
 
-def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initial_epsilon: float = 0.9, final_epsilon: float = 0.1, epsilon_decay: float = 0.995, batch_size: int = 64, loss_fn: nn.Module = nn.MSELoss(), device: str = "cpu", log_dir: str = "logs/", output_path: str = "models/model.pt", can_train=False):
+        # Reset the environment
+        frame = env.reset()
 
-  # Define the optimizer
-  optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-
-  # Create a tensorboard writer
-  writer = SummaryWriter(log_dir=log_dir)
-
-  # Initialize a doubly ended queue to store training examples
-  memory = deque(maxlen=50000)
-
-  # Initializ epsilon
-  epsilon = initial_epsilon
-  
-  # Run the training loop
-  for episode in range(episodes):
-
-    # Set the model to evaluation mode
-    model.eval()
-
-    # Reset the environment
-    frame = env.reset()
-
-    # First random step
-    action = env.action_space.sample()
-
-    # Step the environment
-    frame, reward, done, info = env.step(action)
-
-    state = preprocess_observation(info['observation'])
-
-    episode_reward = 0
-    episode_length = 0
-
-    # Run the episode to completion
-    done = False
-    while not done:
-        # TODO: implement this >
-        # if env.agent_host.peekWorldState().is_mission_running == False:
-        #   break
-        
-        # Select an action
-        if random.random() < epsilon: # Random action
-          action = env.action_space.sample()
-        else: # Action from the model
-          with torch.no_grad():
-            # Send the state to the device
-            state = state.to(device)
-
-            action = torch.argmax(model(state)).item()
-
-            # Bring back from the device
-            state = state.cpu()
+        # First random step
+        action = env.action_space.sample()
 
         # Step the environment
         frame, reward, done, info = env.step(action)
 
-        # Preprocess the next state
-        next_state = preprocess_observation(info)
+        state = preprocess_observation(info["observation"])
 
-        reward -= abs(next_state[1] - next_state[2]).item() / 180
-        
-        # This is very scuffed. There must be a better way to do this. Too bad!
-        try:
-          if info['observation']['MobsKilled'] > 0:
-            print("You killed the zombie!")
-            env.agent_host.sendCommand("quit")
-            reward = 100
-            done = True
-        except:
-          print("Too bad!")
+        episode_reward = 0
+        episode_length = 0
 
-        episode_reward += reward
-        episode_length += 1
+        # Run the episode to completion
+        done = False
+        while not done:
+            # Select an action
+            if random.random() < epsilon:  # Random action
+                action = env.action_space.sample()
+            else:  # Action from the model
+                with torch.no_grad():
+                    # Send the state to the device
+                    state = state.to(device)
 
-        # if reward != 0:
-        #    print(f"Reward: {reward}")
+                    action = torch.argmax(model(state)).item()
 
-        # Store the transition
-        memory.append((state, action, reward, next_state, done))
+                    # Bring back from the device
+                    state = state.cpu()
 
-        # Update the state
-        state = next_state
+            # Step the environment
+            frame, reward, done, info = env.step(action)
 
-    if can_train:
-    
-        # Set the model to training mode
-        model.train()
+            # Preprocess the next state
+            next_state = preprocess_observation(info)
 
-        running_loss = 0
+            # This is very scuffed. There must be a better way to do this. Too bad!
+            try:
+                if info["observation"]["MobsKilled"] > 0:
+                    print("You killed the zombie!")
+                    env.agent_host.sendCommand("quit")
+                    reward = 100
+                    done = True
+            except:
+                print("Too bad!")
 
-        for states, actions, rewards, next_states, dones in tqdm(DataLoader(memory, batch_size, shuffle=True), desc=f"Episode {episode + 1} Training", unit="batch"):
-            # Expand the actions, rewards, and dones
-            states = states.float()
-            actions = actions.long().unsqueeze(1)
-            rewards = rewards.unsqueeze(1)
-            next_states = next_states.float()
-            dones = dones.long().unsqueeze(1)
+            episode_reward += reward
+            episode_length += 1
 
-            # Send the batch to the device
-            states = states.to(device)
-            actions = actions.to(device)
-            rewards = rewards.to(device)
-            next_states = next_states.to(device)
-            dones = dones.to(device)
+            # Store the transition
+            memory.append((state, action, reward, next_state, done))
 
-            # Compute the Q-values
-            current_q_values = model(states).gather(1, actions)
-            next_q_values = model(next_states).max(1)[0].detach().unsqueeze(1)
-            expected_q_values = rewards + gamma * next_q_values * (1 - dones)
+            # Update the state
+            state = next_state
 
-            # Ensure the expected_q_values tensor is float
-            expected_q_values = expected_q_values.float()
+        if can_train:
+            # Set the model to training mode
+            model.train()
 
-            # Compute the loss
-            loss = loss_fn(current_q_values, expected_q_values)
+            running_loss = 0
 
-            # Tally the loss
-            running_loss += loss.item()
+            for i in range(episode_length):
+                # Sample a batch from the memory
+                batch = random.sample(memory, min(batch_size, len(memory)))
 
-            # Perform a gradient descent step
->>>>>>> 5a94b5a1b1ff0693a8960b7408e6a86c297b68d2
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                # Unpack the batch
+                states, actions, rewards, next_states, dones = zip(*batch)
 
-            # Bring back to the CPU
-            states = states.cpu()
-            actions = actions.cpu()
-            rewards = rewards.cpu()
-            next_states = next_states.cpu()
-            dones = dones.cpu()
+                # Expand the actions, rewards, and dones
+                states = torch.stack(states).float()
+                actions = torch.tensor(actions, dtype=torch.long).unsqueeze(1)
+                rewards = torch.tensor(rewards).unsqueeze(1)
+                next_states = torch.stack(next_states).float()
+                dones = torch.tensor(dones, dtype=torch.long).unsqueeze(1)
 
+                # Send the batch to the device
+                states = states.to(device)
+                actions = actions.to(device)
+                rewards = rewards.to(device)
+                next_states = next_states.to(device)
+                dones = dones.to(device)
 
-    print(f"Episode {episode + 1} Loss: {running_loss / len(memory):.2f} Episode Reward: {episode_reward:.2f}")
+                # Compute the Q-values
+                current_q_values = model(states).gather(1, actions)
+                next_q_values = model(next_states).max(1)[0].detach().unsqueeze(1)
+                expected_q_values = rewards + gamma * next_q_values * (1 - dones)
 
-    # Log the loss
-    writer.add_scalar("Loss", running_loss / len(memory), episode)
+                # Ensure the expected_q_values tensor is float
+                expected_q_values = expected_q_values.float()
 
-    # Log the epsilon
-    writer.add_scalar("Epsilon", epsilon, episode)
+                # Compute the loss
+                loss = loss_fn(current_q_values, expected_q_values)
 
-    # Log the reward
-    writer.add_scalar("Reward", episode_reward, episode)
+                # Tally the loss
+                running_loss += loss.item()
 
-    # Log the episode length
-    writer.add_scalar("Episode Length", episode_length, episode)
+                # Perform a gradient descent step
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-    # Decay epsilon
-    epsilon = max(final_epsilon, epsilon_decay * epsilon)  
+                # Bring back to the CPU
+                states = states.cpu()
+                actions = actions.cpu()
+                rewards = rewards.cpu()
+                next_states = next_states.cpu()
+                dones = dones.cpu()
 
-    # Save the model
-    torch.save(model.state_dict(), output_path)
-    
-    save_data_with_pickle(memory, f"trajectories/trajectory_data_episode_{episode}.pkl")
-    
-  env.close()
+        print(
+            f"Episode {episode + 1} Loss: {running_loss / episode_length:.2f} Episode Reward: {episode_reward:.2f}"
+        )
+
+        # Log the loss
+        writer.add_scalar("Loss", running_loss / episode_length, episode)
+
+        # Log the epsilon
+        writer.add_scalar("Epsilon", epsilon, episode)
+
+        # Log the reward
+        writer.add_scalar("Reward", episode_reward, episode)
+
+        # Log the episode length
+        writer.add_scalar("Episode Length", episode_length, episode)
+
+        # Decay epsilon
+        epsilon = max(final_epsilon, epsilon_decay * epsilon)
+
+        # Save the model
+        torch.save(model.state_dict(), output_path)
+
+        # Save the memory
+        save_data_with_pickle(
+            memory, f"trajectories/trajectory_data_episode_{episode}.pkl"
+        )
+
 
 @marlo.threaded
-def start_agent(join_token, model: nn.Module, device="cpu"):
+def start_agent(join_token, model: nn.Module, can_train: bool = False):
     # Initialize the environment
     env = marlo.init(join_token)
 
     # Train for 100 episodes
-    train(env, model, episodes=100, device=device)
+    train(env, model, episodes=100, can_train=can_train)
 
     # Close the environment
     env.close()
@@ -255,6 +250,7 @@ def start_agent(join_token, model: nn.Module, device="cpu"):
 
 if __name__ == "__main__":
     client_pool = [("127.0.0.1", 10000), ("127.0.0.1", 10001)]
+    # Create the environment
     join_tokens = marlo.make(
         "mission.xml",
         params={
@@ -268,30 +264,16 @@ if __name__ == "__main__":
 
     # Ensure we have two agents
     assert len(join_tokens) == 2
-    
-    model = build_model(FEATURE_SIZE, 9)
-
-<<<<<<< HEAD
-    # Check if GPU is available
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-=======
-    thread_handler_0, _ = agent_thread(join_tokens[0], model, can_train=True)
-    thread_handler_1, _ = agent_thread(join_tokens[1], model, can_train=False)
-    thread_handler_0.join()
-    thread_handler_1.join()
-    
-    
->>>>>>> 5a94b5a1b1ff0693a8960b7408e6a86c297b68d2
 
     # Build the model
-    model = build_model(FEATURE_SIZE, 9, 6, device=device)
+    model = build_model(FEATURE_SIZE, 9)
 
     print("Starting Agents")
 
     threads = []
 
-    threads.append(start_agent(join_tokens[0])[0])
-    threads.append(start_agent(join_tokens[1])[0])
+    threads.append(start_agent(join_tokens[0], model, can_train=True)[0])
+    threads.append(start_agent(join_tokens[1], model)[0])
 
     # Wait for training to finish
     for thread in threads:
