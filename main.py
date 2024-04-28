@@ -44,6 +44,15 @@ def build_model(num_inputs: int, num_actions: int):
         nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
         nn.ReLU(),
         nn.Dropout(DROPOUT_PROB),
+        nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
+        nn.ReLU(),
+        nn.Dropout(DROPOUT_PROB),
+        nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
+        nn.ReLU(),
+        nn.Dropout(DROPOUT_PROB),
+        nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
+        nn.ReLU(),
+        nn.Dropout(DROPOUT_PROB),
         nn.Linear(HIDDEN_SIZE, num_actions),
     )
 
@@ -83,8 +92,6 @@ def preprocess_observation(info):
                 elif yaw_delta < -180:
                     yaw_delta += 360
 
-                yaw_delta
-
                 features = torch.tensor(
                     [x, z, yaw, life, distance_to_enemy, yaw_delta, enemy_life],
                     dtype=torch.float32,
@@ -109,7 +116,7 @@ def train(
     epsilon_decay: float = 0.995,
     batch_size: int = 64,
     loss_fn: nn.Module = nn.MSELoss(),
-    log_dir: str = "logs/",
+    log_dir: str = "logs/Bootstrapping",
     model_dir: str = "models/",
     trajectory_dir: str = "trajectories/",
     can_train: bool = False,
@@ -132,6 +139,8 @@ def train(
 
     # Send the model to the device
     model.to(device)
+
+    print(env.action_space.n)
 
     # Run the training loop
     for episode in range(episodes):
@@ -158,18 +167,31 @@ def train(
         # Run the episode to completion
         done = False
         while not done:
-            # Select an action
-            if random.random() < epsilon:  # Random action
-                action = env.action_space.sample()
-            else:  # Action from the model
-                with torch.no_grad():
-                    # Send the state to the device
-                    state = state.to(device)
+            if can_train: # Epsilon-Greedy Model Policy
+                # Select an action
+                if random.random() < epsilon:  # Random action
+                    action = env.action_space.sample()
+                else:  # Action from the model
+                    with torch.no_grad():
+                        # Send the state to the device
+                        state = state.to(device)
 
-                    action = torch.argmax(model(state)).item()
+                        action = torch.argmax(model(state)).item()
 
-                    # Bring back from the device
-                    state = state.cpu()
+                        # Bring back from the device
+                        state = state.cpu()
+            else: # Hardcoded Policy
+                x, z, yaw, life, distance_to_enemy, yaw_delta, enemy_life = state
+
+                if abs(yaw_delta) < 5:
+                    if distance_to_enemy < 3:
+                        action = 5 if action == 0 else 0
+                    else:
+                        action = 1 if action not in [3, 4] else 0
+                elif yaw_delta < 0: # Turn right
+                    action = 3
+                elif yaw_delta > 0: # Turn left
+                    action = 4
 
             # Step the environment
             frame, reward, done, info = env.step(action)
@@ -208,7 +230,7 @@ def train(
             # Update the state
             state = next_state
 
-        print(f"Episode Reward({threading.current_thread()}): {episode_reward:.2f}")
+        print(f"Episode {episode} Reward({threading.current_thread()}): {episode_reward:.2f}")
 
         if can_train:
             # Set the model to training mode
@@ -290,8 +312,8 @@ def start_agent(join_token, memory, trajectories, model: nn.Module, can_train: b
     # Initialize the environment
     env = marlo.init(join_token)
 
-    # Train for 100 episodes
-    train(env, memory, trajectories, model, episodes=100, can_train=can_train)
+    # Train for 2000 episodes
+    train(env, memory, trajectories, model, episodes=2000, can_train=can_train)
 
     # Close the environment
     env.close()
@@ -317,7 +339,7 @@ if __name__ == "__main__":
     assert len(join_tokens) == 2
 
     # Build the model
-    model = build_model(FEATURE_SIZE, 9)
+    model = build_model(FEATURE_SIZE, 7)
 
     # Initialize the memory
     experienceReplay = deque(maxlen=10000)
