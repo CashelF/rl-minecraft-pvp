@@ -5,7 +5,7 @@
     </About>
 
     <ModSettings>
-        <MsPerTick>35</MsPerTick>
+        <MsPerTick>25</MsPerTick>
     </ModSettings>
 
     <ServerSection>
@@ -46,7 +46,11 @@
             <ObservationFromNearbyEntities>
                 <Range name="entities" xrange="20" yrange="10" zrange="20"/>
             </ObservationFromNearbyEntities>
-            <ContinuousMovementCommands/>
+            <ContinuousMovementCommands turnSpeedDegs="75">
+                <ModifierList type="deny-list">
+                  <command>use</command>
+                </ModifierList>
+            </ContinuousMovementCommands>
             <RewardForMissionEnd> 
                 <Reward description="quit" reward="-100" />
             </RewardForMissionEnd>
@@ -71,7 +75,11 @@
             <ObservationFromNearbyEntities>
                 <Range name="entities" xrange="20" yrange="10" zrange="20"/>
             </ObservationFromNearbyEntities>
-            <ContinuousMovementCommands/>
+            <ContinuousMovementCommands turnSpeedDegs="75">
+                <ModifierList type="deny-list">
+                  <command>use</command>
+                </ModifierList>
+            </ContinuousMovementCommands>
             <RewardForMissionEnd> 
                 <Reward description="quit" reward="-100" />
             </RewardForMissionEnd>
