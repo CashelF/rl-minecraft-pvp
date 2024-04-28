@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 
 FEATURE_SIZE = 7
+NUM_ACTIONS = 7
 
 def get_new_filename():
     """Generate a unique filename using the current timestamp."""
