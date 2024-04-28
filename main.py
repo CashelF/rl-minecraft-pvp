@@ -29,12 +29,6 @@ def save_trajectory(filename, trajectory):
     with open(filename, 'wb') as file:  # 'wb' for writing in binary
         pickle.dump(trajectory, file)
 
-def load_trajectory_data(filename):
-    """Load the entire list of trajectory data from a pickle file."""
-    with open(filename, 'rb') as file:
-        trajectory = pickle.load(file)
-    return trajectory
-
 
 def build_model(num_inputs: int, num_actions: int):
     model = nn.Sequential(
@@ -82,8 +76,6 @@ def preprocess_observation(info):
                     yaw_delta -= 360
                 elif yaw_delta < -180:
                     yaw_delta += 360
-
-                yaw_delta
 
                 features = torch.tensor(
                     [x, z, yaw, life, distance_to_enemy, yaw_delta, enemy_life],
