@@ -232,7 +232,7 @@ def train(
 
             running_loss = 0
 
-            for i in tqdm(range(episode_length)):
+            for i in tqdm(range(episode_length // batch_size)):
                 # Sample a batch from the memory
                 batch = random.sample(memory, min(batch_size, len(memory)))
 

@@ -54,12 +54,10 @@ def train_network(model, memory, episodes, batch_size, gamma, optimizer, loss_fn
     model.to(device)
     model.train()
     for file_path in trajectory_files:
-        episode_data = load_trajectory_data(file_path)
-        memory.extend(episode_data)
+        trajectory_data = load_trajectory_data(file_path)
         running_loss = 0
-        episode_length = len(episode_data)
 
-        for i in tqdm(range(len(memory) // batch_size)):
+        for i in tqdm(range(len(trajectory_data) // batch_size)):
             # Sample a batch from the memory
             batch = random.sample(memory, min(batch_size, len(memory)))
 
