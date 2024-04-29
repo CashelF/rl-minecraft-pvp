@@ -87,48 +87,69 @@ def randomly_move_agent(env, num_steps_range=(1, 10), num_turns_range=(0, 4)):
     env.agent_host.sendCommand("move 0")
     
 
-def preprocess_observation(info):
-    """Extract the hand-crafted state vector from an observation"""
+def encode_state(info: dict, previous_agent_yaw: float = 0.0):
+    """Extract the hand-crafted state vector from an observation."""
     try:
         observation = info["observation"]
 
-        x, z, yaw, life = (
-            observation["XPos"],
-            observation["ZPos"],
-            observation["Yaw"],
-            observation["Life"],
+        # Find the agent and enemy entities
+        agent = None
+        enemy = None
+
+        for entity in observation["entities"]:
+            if entity["name"] == observation["Name"]:
+                agent = entity
+            if entity["name"] != observation["Name"]:
+                enemy = entity
+
+        # If the agent or enemy is not found, return a zero vector
+        if agent is None or enemy is None:
+            return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
+        
+        # Extract the agent's position and life
+        agent_x, agent_z, agent_x_motion, agent_z_motion, agent_yaw, agent_life = (
+            agent["x"],
+            agent["z"],
+            agent["motionX"],
+            agent["motionZ"],
+            agent["yaw"],
+            agent["life"],
         )
 
         # Bound yaw between -180 and 180
-        yaw = yaw + 360 if yaw < -180 else yaw - 360 if yaw > 180 else yaw
+        agent_yaw = agent_yaw + 360 if agent_yaw < -180 else agent_yaw - 360 if agent_yaw > 180 else agent_yaw
 
-        for entity in observation["entities"]:
-            if entity["name"] != observation["Name"]:
-                # Extract the enemy's position and life
-                enemy_x, enemy_z, enemy_life = entity["x"], entity["z"], entity["life"]
+        # Calculate the agent's overall speed
+        agent_speed = math.sqrt(agent_x_motion**2 + agent_z_motion**2)
 
-                # Calculate the distance & angle to the enemy
-                dx, dz = enemy_x - x, enemy_z - z
+        # Calculate the change in yaw from the previous step
+        agent_yaw_delta = agent_yaw - previous_agent_yaw
 
-                distance_to_enemy = math.sqrt(dx**2 + dz**2)
+        # Bound between -180 and 180
+        agent_yaw_delta = agent_yaw_delta + 360 if agent_yaw_delta < -180 else agent_yaw_delta - 360 if agent_yaw_delta > 180 else agent_yaw_delta
 
-                yaw_to_enemy = -180 * math.atan2(dx, dz) / math.pi
-                
-                yaw_delta = yaw - yaw_to_enemy
-                
-                # Bound yaw_delta between -180 and 180
-                yaw_delta = yaw_delta + 360 if yaw_delta < -180 else yaw_delta - 360 if yaw_delta > 180 else yaw_delta
+        # Extract the enemy's position and life
+        enemy_x, enemy_z, enemy_life = entity["x"], entity["z"], entity["life"]
 
-                # Build the state vector
-                state = torch.tensor(
-                    [x, z, yaw, life, distance_to_enemy, yaw_delta, enemy_life],
-                    dtype=torch.float32,
-                )
+        # Calculate the distance & angle to the enemy
+        dx, dz = enemy_x - agent_x, enemy_z - agent_z
 
-                return state
+        distance_to_enemy = math.sqrt(dx**2 + dz**2)
 
-        # No enemy found
-        return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
+        yaw_to_enemy = -180 * math.atan2(dx, dz) / math.pi
+        
+        enemy_yaw_delta = agent_yaw - yaw_to_enemy
+        
+        # Bound between -180 and 180
+        enemy_yaw_delta = enemy_yaw_delta + 360 if enemy_yaw_delta < -180 else enemy_yaw_delta - 360 if enemy_yaw_delta > 180 else enemy_yaw_delta
+
+        # Build the state vector
+        state = torch.tensor(
+            [agent_speed, agent_yaw_delta, agent_yaw, agent_life, distance_to_enemy, enemy_yaw_delta, enemy_life],
+            dtype=torch.float32,
+        )
+
+        return state
     except:
         # Observation not found
         return torch.zeros(FEATURE_SIZE, dtype=torch.float32)

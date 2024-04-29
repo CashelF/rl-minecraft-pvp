@@ -12,8 +12,8 @@ from train import train_random_sample
 from utils import (
     FEATURE_SIZE,
     build_model,
+    encode_state,
     get_new_filename,
-    preprocess_observation,
     randomly_move_agent,
     save_trajectory,
 )
@@ -69,15 +69,16 @@ def play_episodes(
         # Step the environment
         frame, reward, done, info = env.step(action)
 
-        state = preprocess_observation(info)
-        
-        randomly_move_agent(env)
-        
+        current_yaw = 0
         current_damage_dealt = 0
         current_damage_taken = 0
 
         episode_reward = 0
         episode_length = 0
+
+        state = encode_state(info, 0)
+        
+        randomly_move_agent(env)
 
         # Run the episode to completion
         done = False
@@ -111,8 +112,11 @@ def play_episodes(
             # Step the environment
             frame, reward, done, info = env.step(action)
 
+            # Small negative reward for each step
+            reward -= 0.1
+
             # Preprocess the next state
-            next_state = preprocess_observation(info)
+            next_state = encode_state(info, current_yaw)
 
             # This is very scuffed. There must be a better way to do this. Too bad!
             try:
@@ -127,14 +131,15 @@ def play_episodes(
                 if info["observation"]["PlayersKilled"] > 0:
                     print(f"{info['observation']['Name']} killed the enemy!")
                     env.agent_host.sendCommand("quit")
-                    reward = 100
-                    done = True         
+                    reward += 100
+                    done = True   
+
+                # Update the current yaw measurement
+                current_yaw = info["observation"]["Yaw"]  
             except:
                 print("Too bad!")
-            
-            # Small negative reward for each step
-            reward -= 0.1
 
+            # Update the episode reward and length
             episode_reward += reward
             episode_length += 1
 
@@ -142,8 +147,8 @@ def play_episodes(
             memory.append((state, action, reward, next_state, done))
             
             # Add trajectory
-            trajectories.append((state, action, reward, next_state, done))
-
+            trajectories.append((state, action, reward, next_state, done))   
+            
             # Update the state
             state = next_state
 
@@ -183,7 +188,7 @@ def start_agent(join_token, memory, trajectories, model: nn.Module, can_train: b
     env = marlo.init(join_token)
 
     # Train for 2000 episodes
-    play_episodes(env, memory, trajectories, model, episodes=4000, log_dir="logs/BetterBootstrapping", can_train=can_train)
+    play_episodes(env, memory, trajectories, model, episodes=4000, log_dir="logs/B(atman)etterStates", can_train=can_train)
 
     # Close the environment
     env.close()
