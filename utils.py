@@ -3,6 +3,7 @@ import math
 import pickle
 import random
 import time
+from glob import glob
 
 import torch
 import torch.nn as nn
@@ -26,6 +27,12 @@ def load_trajectory_data(filename):
         trajectory = pickle.load(file)
     return trajectory
 
+def load_trajectory_directory(directory: str):
+    """Load all the trajectory data from a directory of pickle files."""
+    trajectories = []
+    for file in glob(f"{directory}/*.pkl"):
+        trajectories.extend(load_trajectory_data(file))
+    return trajectories
 
 def build_model(num_inputs: int, num_actions: int, hidden_size: int = 512, dropout_prob: float = 0.4) -> nn.Module:
     """Build a simple fully connected network."""
