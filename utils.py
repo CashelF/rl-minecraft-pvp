@@ -25,7 +25,7 @@ def load_trajectory_data(filename):
     return trajectory
 
 
-def build_model(num_inputs: int, num_actions: int, hidden_size: int = 256, dropout_prob: float = 0.4) -> nn.Module:
+def build_model(num_inputs: int, num_actions: int, hidden_size: int = 512, dropout_prob: float = 0.4) -> nn.Module:
     """Build a simple fully connected network."""
     model = nn.Sequential(
         nn.Linear(num_inputs, hidden_size),

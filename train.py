@@ -31,7 +31,7 @@ def train(model: nn.Module, trajectories: DataLoader, num_epochs: int = 10, gamm
     model.train()
 
     # Define the optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.9, weight_decay=1e-4)
 
     # Get the current timestamp
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -93,11 +93,11 @@ def train_random_sample(model: nn.Module, memory: deque, num_batches: int, gamma
     model.train()
 
     # Define the optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-4, momentum=0.9, weight_decay=1e-4)
 
     running_loss = 0
 
-    for i in tqdm(range(num_batches), desc="Training on Experience Replay Buffer", unit="Batch"):
+    for i in range(num_batches):
         # Sample a batch from the memory
         batch = random.sample(memory, min(batch_size, len(memory)))
 
@@ -162,7 +162,7 @@ if __name__ == "__main__":
     # Load the trajectory data
     trajectories = load_trajectory_data("trajectories/trajectory_data_2024-04-28_03-12-05.pkl")
 
-    print("Trajectories loaded.")
+    print(f"{len(trajectories)} Trajectories loaded.")
 
     # Train the model
-    train(model, DataLoader(trajectories, batch_size=128), log_dir="logs/Test", device=device)
+    train(model, DataLoader(trajectories, batch_size=131072), num_epochs=20, log_dir="logs/Test", device=device)

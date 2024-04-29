@@ -6,16 +6,13 @@ from collections import deque
 import marlo
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
 
 from train import train_random_sample
 from utils import (
     FEATURE_SIZE,
     build_model,
     get_new_filename,
-    load_trajectory_data,
     preprocess_observation,
     save_trajectory,
 )
@@ -31,8 +28,8 @@ def play_episodes(
     gamma: float = 0.9,
     initial_epsilon: float = 0.9,
     final_epsilon: float = 0.1,
-    epsilon_decay: float = 0.995,
-    log_dir: str = "logs/Bootstrapping",
+    epsilon_decay: float = 0.99,
+    log_dir: str = "logs/",
     model_dir: str = "models/",
     trajectory_dir: str = "trajectories/",
     can_train: bool = False,
@@ -102,9 +99,9 @@ def play_episodes(
                     else:
                         action = 1 if action not in [3, 4] else 0
                 elif yaw_delta < 0: # Turn right
-                    action = 3
+                    action = 3 if action != 1 else 0
                 elif yaw_delta > 0: # Turn left
-                    action = 4
+                    action = 4 if action != 1 else 0
 
             # Step the environment
             frame, reward, done, info = env.step(action)
@@ -129,6 +126,9 @@ def play_episodes(
                     done = True         
             except:
                 print("Too bad!")
+            
+            # Small negative reward for each step
+            reward -= 0.1
 
             episode_reward += reward
             episode_length += 1
@@ -142,7 +142,7 @@ def play_episodes(
             # Update the state
             state = next_state
 
-        print(f"Episode {episode} Reward({threading.current_thread()}): {episode_reward:.2f}")
+        print(f"Episode {episode + 1} Reward({threading.current_thread()}): {episode_reward:.2f}")
 
         if can_train:
             # Train on trajectory data from the experience replay buffer
@@ -167,7 +167,9 @@ def play_episodes(
             save_trajectory(os.path.join(trajectory_dir, trajectory_file_name), trajectories)
 
             # Save the model
-            torch.save(model.state_dict(), os.path.join(model_dir, "model.pt"))    
+            torch.save(model.state_dict(), os.path.join(model_dir, "model.pt"))  
+
+            print(f"Episode {episode + 1} Loss: {loss:.2f}")  
 
 
 @marlo.threaded
@@ -176,7 +178,7 @@ def start_agent(join_token, memory, trajectories, model: nn.Module, can_train: b
     env = marlo.init(join_token)
 
     # Train for 2000 episodes
-    play_episodes(env, memory, trajectories, model, episodes=4000, can_train=can_train)
+    play_episodes(env, memory, trajectories, model, episodes=4000, log_dir="logs/BetterBootstrapping", can_train=can_train)
 
     # Close the environment
     env.close()
@@ -205,7 +207,7 @@ if __name__ == "__main__":
     # Build the model
     model = build_model(num_inputs=FEATURE_SIZE, num_actions=7)
 
-    model.load_state_dict(torch.load("models/bot.pt"))
+    # model.load_state_dict(torch.load("models/bot.pt"))
 
     # Initialize the memory
     memory = deque(maxlen=50000)
