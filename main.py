@@ -47,16 +47,18 @@ def play_episodes(
         # Create a tensorboard writer
         writer = SummaryWriter(log_dir=log_dir)
 
-    # Set the device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Set the device
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Send the model to the device
-    model.to(device)
+        # Send the model to the device
+        model.to(device)
 
     # Run the training loop
     for episode in range(episodes):
-        # Set the model to evaluation mode
-        model.eval()
+
+        if can_train:
+            # Set the model to evaluation mode
+            model.eval()
 
         # Reset the environment
         frame = env.reset()
@@ -96,10 +98,10 @@ def play_episodes(
             else: # Hardcoded Policy
                 x, z, yaw, life, distance_to_enemy, yaw_delta, enemy_life = state
 
-                if abs(yaw_delta) < 5:
-                    if distance_to_enemy < 3:
+                if abs(yaw_delta) < 5: # If we are looking at the enemy
+                    if distance_to_enemy < 3: #If they are close enough to hit, attack
                         action = 5 if action == 0 else 0
-                    else:
+                    else: # If they are too far, move towards them
                         action = 1 if action not in [3, 4] else 0
                 elif yaw_delta < 0: # Turn right
                     action = 3 if action != 1 else 0
