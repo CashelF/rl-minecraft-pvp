@@ -99,11 +99,12 @@ def encode_state(info: dict, previous_agent_yaw: float = 0.0):
         for entity in observation["entities"]:
             if entity["name"] == observation["Name"]:
                 agent = entity
-            if entity["name"] != observation["Name"]:
+            elif entity["name"] != observation["Name"]:
                 enemy = entity
 
         # If the agent or enemy is not found, return a zero vector
         if agent is None or enemy is None:
+            print("Failed to find agent or enemy in observation.")
             return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
         
         # Extract the agent's position and life
@@ -113,7 +114,7 @@ def encode_state(info: dict, previous_agent_yaw: float = 0.0):
             agent["motionX"],
             agent["motionZ"],
             agent["yaw"],
-            agent["life"],
+            agent["life"]
         )
 
         # Bound yaw between -180 and 180
@@ -129,7 +130,7 @@ def encode_state(info: dict, previous_agent_yaw: float = 0.0):
         agent_yaw_delta = agent_yaw_delta + 360 if agent_yaw_delta < -180 else agent_yaw_delta - 360 if agent_yaw_delta > 180 else agent_yaw_delta
 
         # Extract the enemy's position and life
-        enemy_x, enemy_z, enemy_life = entity["x"], entity["z"], entity["life"]
+        enemy_x, enemy_z, enemy_life = enemy["x"], enemy["z"], enemy["life"]
 
         # Calculate the distance & angle to the enemy
         dx, dz = enemy_x - agent_x, enemy_z - agent_z
@@ -141,7 +142,7 @@ def encode_state(info: dict, previous_agent_yaw: float = 0.0):
         enemy_yaw_delta = agent_yaw - yaw_to_enemy
         
         # Bound between -180 and 180
-        enemy_yaw_delta = enemy_yaw_delta + 360 if enemy_yaw_delta < -180 else enemy_yaw_delta - 360 if enemy_yaw_delta > 180 else enemy_yaw_delta
+        enemy_yaw_delta = enemy_yaw_delta + 360 if enemy_yaw_delta < -  180 else enemy_yaw_delta - 360 if enemy_yaw_delta > 180 else enemy_yaw_delta
 
         # Build the state vector
         state = torch.tensor(
@@ -151,7 +152,7 @@ def encode_state(info: dict, previous_agent_yaw: float = 0.0):
 
         return state
     except:
-        # Observation not found
+        print("Failed to extract state from observation.")
         return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
     
     
