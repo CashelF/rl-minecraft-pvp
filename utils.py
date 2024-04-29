@@ -125,3 +125,11 @@ def preprocess_observation(info):
     except:
         # Observation not found
         return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
+    
+    
+def calculate_speed(end_pos, start_pos):
+    """Calculate the speed of the agent in the x and z directions."""
+    x_speed = (end_pos[0] - start_pos[0])
+    z_speed = (end_pos[2] - start_pos[2])
+    speed = math.sqrt(x_speed**2 + z_speed**2)
+    return speed
