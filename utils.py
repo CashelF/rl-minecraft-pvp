@@ -5,6 +5,9 @@ import pickle
 import torch
 import torch.nn as nn
 
+import random
+import time
+
 FEATURE_SIZE = 7
 NUM_ACTIONS = 7
 
@@ -50,6 +53,28 @@ def build_model(num_inputs: int, num_actions: int, hidden_size: int = 256, dropo
     )
 
     return model
+
+def randomly_move_agent(env, num_steps_range=(1, 10), num_turns_range=(0, 4)):
+    """Move the agent randomly at the start of the episode to simulate changing spawn points.
+    
+    Args:
+        env: The environment instance for the agent.
+        num_steps_range (tuple): A tuple specifying the min and max number of steps the agent should move forward.
+        num_turns_range (tuple): A tuple specifying the min and max number of 90-degree turns the agent should make.
+    """
+    num_steps = random.randint(*num_steps_range)
+    num_turns = random.randint(*num_turns_range)
+    turn_direction = random.choice(["turn 1", "turn -1"])  # 'turn 1' for right, 'turn -1' for left
+
+    # Execute turn commands
+    for _ in range(num_turns):
+        env.agent_host.sendCommand(turn_direction)
+        time.sleep(0.5)  # Sleep to ensure the command is executed before the next one
+
+    # Move forward
+    for _ in range(num_steps):
+        env.agent_host.sendCommand("move 1")
+        time.sleep(0.5)
 
 def preprocess_observation(info):
     """Extract the hand-crafted state vector from an observation"""

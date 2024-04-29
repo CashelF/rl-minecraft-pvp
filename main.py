@@ -19,6 +19,7 @@ from utils import (
     load_trajectory_data,
     preprocess_observation,
     save_trajectory,
+    randomly_move_agent,
 )
 
 trajectory_file_name = get_new_filename()
@@ -179,7 +180,7 @@ def start_agent(join_token, memory, trajectories, model: nn.Module, can_train: b
     env = marlo.init(join_token)
 
     # Train for 2000 episodes
-    train(env, memory, trajectories, model, episodes=500, can_train=can_train)
+    play_episodes(env, memory, trajectories, model, episodes=500, can_train=can_train)
 
     # Close the environment
     env.close()
