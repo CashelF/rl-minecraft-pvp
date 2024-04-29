@@ -14,6 +14,7 @@ from utils import (
     build_model,
     get_new_filename,
     preprocess_observation,
+    randomly_move_agent,
     save_trajectory,
 )
 
@@ -67,6 +68,8 @@ def play_episodes(
         frame, reward, done, info = env.step(action)
 
         state = preprocess_observation(info)
+        
+        randomly_move_agent(env)
         
         current_damage_dealt = 0
         current_damage_taken = 0
@@ -196,7 +199,7 @@ if __name__ == "__main__":
             "client_pool": client_pool,
             "suppress_info": False,
             "kill_clients_after_num_rounds": 9999,
-            "videoResolution": [400, 300],
+            "videoResolution": [800, 600],
             "PrioritiesOffscreenRendering": False,
         },
     )
