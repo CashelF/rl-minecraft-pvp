@@ -1,7 +1,4 @@
-import datetime
-import math
 import os
-import pickle
 import random
 import threading
 from collections import deque
@@ -9,140 +6,38 @@ from collections import deque
 import marlo
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import time
 
-FEATURE_SIZE = 7
-HIDDEN_SIZE = 256
-DROPOUT_PROB = 0.4
+from train import train_random_sample
+from utils import (
+    FEATURE_SIZE,
+    build_model,
+    get_new_filename,
+    load_trajectory_data,
+    preprocess_observation,
+    save_trajectory,
+)
 
-def get_new_filename():
-    """Generate a unique filename using the current timestamp."""
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    return f"trajectories/trajectory_data_{timestamp}.pkl"
+trajectory_file_name = get_new_filename()
 
-trajectory_filename = get_new_filename()
-
-
-def save_trajectory(filename, trajectory):
-    """Save the complete trajectory list to a binary file using pickle."""
-    with open(filename, 'wb') as file:  # 'wb' for writing in binary
-        pickle.dump(trajectory, file)
-        
-def randomly_move_agent(env, num_steps_range=(1, 10), num_turns_range=(0, 4)):
-    """Move the agent randomly at the start of the episode to simulate changing spawn points.
-    
-    Args:
-        env: The environment instance for the agent.
-        num_steps_range (tuple): A tuple specifying the min and max number of steps the agent should move forward.
-        num_turns_range (tuple): A tuple specifying the min and max number of 90-degree turns the agent should make.
-    """
-    num_steps = random.randint(*num_steps_range)
-    num_turns = random.randint(*num_turns_range)
-    turn_direction = random.choice(["turn 1", "turn -1"])  # 'turn 1' for right, 'turn -1' for left
-
-    # Execute turn commands
-    for _ in range(num_turns):
-        env.agent_host.sendCommand(turn_direction)
-        time.sleep(0.5)  # Sleep to ensure the command is executed before the next one
-
-    # Move forward
-    for _ in range(num_steps):
-        env.agent_host.sendCommand("move 1")
-        time.sleep(0.5)
-
-
-def build_model(num_inputs: int, num_actions: int):
-    model = nn.Sequential(
-        nn.Linear(num_inputs, HIDDEN_SIZE),
-        nn.ReLU(),
-        nn.Dropout(DROPOUT_PROB),
-        nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
-        nn.ReLU(),
-        nn.Dropout(DROPOUT_PROB),
-        nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
-        nn.ReLU(),
-        nn.Dropout(DROPOUT_PROB),
-        nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
-        nn.ReLU(),
-        nn.Dropout(DROPOUT_PROB),
-        nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
-        nn.ReLU(),
-        nn.Dropout(DROPOUT_PROB),
-        nn.Linear(HIDDEN_SIZE, num_actions),
-    )
-
-    return model
-
-
-def preprocess_observation(info):
-    try:
-        observation = info["observation"]
-
-        x, z, yaw, life = (
-            observation["XPos"],
-            observation["ZPos"],
-            observation["Yaw"],
-            observation["Life"],
-        )
-
-        # Bound yaw between -180 and 180
-        yaw = yaw + 360 if yaw < -180 else yaw - 360 if yaw > 180 else yaw
-
-        for entity in observation["entities"]:
-            if entity["name"] != observation["Name"]:
-                # Extract the enemy's position and life
-                enemy_x, enemy_z, enemy_life = entity["x"], entity["z"], entity["life"]
-
-                # Calculate the distance & angle to the enemy
-                dx, dz = enemy_x - x, enemy_z - z
-
-                distance_to_enemy = math.sqrt(dx**2 + dz**2)
-
-                yaw_to_enemy = -180 * math.atan2(dx, dz) / math.pi
-                
-                yaw_delta = yaw - yaw_to_enemy
-
-                if yaw_delta > 180:
-                    yaw_delta -= 360
-                elif yaw_delta < -180:
-                    yaw_delta += 360
-
-                features = torch.tensor(
-                    [x, z, yaw, life, distance_to_enemy, yaw_delta, enemy_life],
-                    dtype=torch.float32,
-                )
-
-                return features
-
-        return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
-    except:
-        return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
-
-
-def train(
+def play_episodes(
     env,
-    memory: deque,
-    trajectories,
     model: nn.Module,
+    memory: deque,
+    trajectories: list,
     episodes: int = 500,
     gamma: float = 0.9,
     initial_epsilon: float = 0.9,
     final_epsilon: float = 0.1,
     epsilon_decay: float = 0.995,
-    batch_size: int = 64,
-    loss_fn: nn.Module = nn.MSELoss(),
     log_dir: str = "logs/Bootstrapping",
     model_dir: str = "models/",
     trajectory_dir: str = "trajectories/",
     can_train: bool = False,
 ):
-    # Define the optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-
-    # Create a tensorboard writer
-    writer = SummaryWriter(log_dir=log_dir)
 
     # Ensure the output directories exist
     os.makedirs(model_dir, exist_ok=True)
@@ -151,13 +46,15 @@ def train(
     # Initialize epsilon
     epsilon = initial_epsilon
 
+    if can_train:
+        # Create a tensorboard writer
+        writer = SummaryWriter(log_dir=log_dir)
+
     # Set the device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Send the model to the device
     model.to(device)
-
-    print(env.action_space.n)
 
     # Run the training loop
     for episode in range(episodes):
@@ -232,8 +129,7 @@ def train(
                     print(f"{info['observation']['Name']} killed the enemy!")
                     env.agent_host.sendCommand("quit")
                     reward = 100
-                    done = True
-                    
+                    done = True         
             except:
                 print("Too bad!")
 
@@ -252,78 +148,29 @@ def train(
         print(f"Episode {episode} Reward({threading.current_thread()}): {episode_reward:.2f}")
 
         if can_train:
-            # Set the model to training mode
-            model.train()
-
-            running_loss = 0
-
-            for i in tqdm(range(episode_length // batch_size)):
-                # Sample a batch from the memory
-                batch = random.sample(memory, min(batch_size, len(memory)))
-
-                # Unpack the batch
-                states, actions, rewards, next_states, dones = zip(*batch)
-
-                # Expand the actions, rewards, and dones
-                states = torch.stack(states).float()
-                actions = torch.tensor(actions, dtype=torch.long).unsqueeze(1)
-                rewards = torch.tensor(rewards).unsqueeze(1)
-                next_states = torch.stack(next_states).float()
-                dones = torch.tensor(dones, dtype=torch.long).unsqueeze(1)
-
-                # Send the batch to the device
-                states = states.to(device)
-                actions = actions.to(device)
-                rewards = rewards.to(device)
-                next_states = next_states.to(device)
-                dones = dones.to(device)
-
-                # Compute the Q-values
-                current_q_values = model(states).gather(1, actions)
-                next_q_values = model(next_states).max(1)[0].detach().unsqueeze(1)
-                expected_q_values = rewards + gamma * next_q_values * (1 - dones)
-
-                # Ensure the expected_q_values tensor is float
-                expected_q_values = expected_q_values.float()
-
-                # Compute the loss
-                loss: torch.Tensor = loss_fn(current_q_values, expected_q_values)
-
-                # Tally the loss
-                running_loss += loss.item()
-
-                # Perform a gradient descent step
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-
-                # Bring back to the CPU
-                states = states.cpu()
-                actions = actions.cpu()
-                rewards = rewards.cpu()
-                next_states = next_states.cpu()
-                dones = dones.cpu()
+            # Train on trajectory data from the experience replay buffer
+            loss = train_random_sample(model, memory, episode_length, gamma=gamma, device=device)
 
             # Log the loss
-            writer.add_scalar("Loss", running_loss / episode_length, episode)
+            writer.add_scalar("Loss", loss, episode)
 
-            # Log the epsilon
-            writer.add_scalar("Epsilon", epsilon, episode)
-
-            # Log the reward
+            # Log the episode reward
             writer.add_scalar("Reward", episode_reward, episode)
 
             # Log the episode length
             writer.add_scalar("Episode Length", episode_length, episode)
 
+            # Log the epsilon
+            writer.add_scalar("Epsilon", epsilon, episode)
+
             # Decay epsilon
             epsilon = max(final_epsilon, epsilon_decay * epsilon)
             
             # Save the trajectory data
-            save_trajectory(trajectory_filename, trajectories)
+            save_trajectory(os.path.join(trajectory_dir, trajectory_file_name), trajectories)
 
             # Save the model
-            torch.save(model.state_dict(), os.path.join(model_dir, "model.pt"))
+            torch.save(model.state_dict(), os.path.join(model_dir, "model.pt"))    
 
 
 @marlo.threaded
@@ -336,6 +183,7 @@ def start_agent(join_token, memory, trajectories, model: nn.Module, can_train: b
 
     # Close the environment
     env.close()
+
 
 
 if __name__ == "__main__":
@@ -358,10 +206,12 @@ if __name__ == "__main__":
     assert len(join_tokens) == 2
 
     # Build the model
-    model = build_model(FEATURE_SIZE, 7)
+    model = build_model(num_inputs=FEATURE_SIZE, num_actions=7)
+
+    model.load_state_dict(torch.load("models/bot.pt"))
 
     # Initialize the memory
-    experienceReplay = deque(maxlen=50000)
+    memory = deque(maxlen=50000)
     
     trajectories = []
 
@@ -369,8 +219,8 @@ if __name__ == "__main__":
 
     threads = []
 
-    threads.append(start_agent(join_tokens[0], experienceReplay, trajectories, model, can_train=True)[0])
-    threads.append(start_agent(join_tokens[1], experienceReplay, trajectories, model)[0])
+    threads.append(start_agent(join_tokens[0], model, memory, trajectories, can_train=True)[0])
+    threads.append(start_agent(join_tokens[1], model, memory, trajectories)[0])
 
     # Wait for training to finish
     for thread in threads:
