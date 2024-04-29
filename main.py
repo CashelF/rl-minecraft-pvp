@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+import time
 
 FEATURE_SIZE = 7
 HIDDEN_SIZE = 256
@@ -28,6 +29,28 @@ def save_trajectory(filename, trajectory):
     """Save the complete trajectory list to a binary file using pickle."""
     with open(filename, 'wb') as file:  # 'wb' for writing in binary
         pickle.dump(trajectory, file)
+        
+def randomly_move_agent(env, num_steps_range=(1, 10), num_turns_range=(0, 4)):
+    """Move the agent randomly at the start of the episode to simulate changing spawn points.
+    
+    Args:
+        env: The environment instance for the agent.
+        num_steps_range (tuple): A tuple specifying the min and max number of steps the agent should move forward.
+        num_turns_range (tuple): A tuple specifying the min and max number of 90-degree turns the agent should make.
+    """
+    num_steps = random.randint(*num_steps_range)
+    num_turns = random.randint(*num_turns_range)
+    turn_direction = random.choice(["turn 1", "turn -1"])  # 'turn 1' for right, 'turn -1' for left
+
+    # Execute turn commands
+    for _ in range(num_turns):
+        env.agent_host.sendCommand(turn_direction)
+        time.sleep(0.5)  # Sleep to ensure the command is executed before the next one
+
+    # Move forward
+    for _ in range(num_steps):
+        env.agent_host.sendCommand("move 1")
+        time.sleep(0.5)
 
 
 def build_model(num_inputs: int, num_actions: int):
@@ -151,6 +174,8 @@ def train(
         frame, reward, done, info = env.step(action)
 
         state = preprocess_observation(info)
+        
+        randomly_move_agent(env)
         
         current_damage_dealt = 0
         current_damage_taken = 0
@@ -307,7 +332,7 @@ def start_agent(join_token, memory, trajectories, model: nn.Module, can_train: b
     env = marlo.init(join_token)
 
     # Train for 2000 episodes
-    train(env, memory, trajectories, model, episodes=2000, can_train=can_train)
+    train(env, memory, trajectories, model, episodes=500, can_train=can_train)
 
     # Close the environment
     env.close()
@@ -324,7 +349,7 @@ if __name__ == "__main__":
             "client_pool": client_pool,
             "suppress_info": False,
             "kill_clients_after_num_rounds": 9999,
-            "videoResolution": [400, 300],
+            "videoResolution": [800, 600],
             "PrioritiesOffscreenRendering": False,
         },
     )
@@ -336,7 +361,7 @@ if __name__ == "__main__":
     model = build_model(FEATURE_SIZE, 7)
 
     # Initialize the memory
-    experienceReplay = deque(maxlen=10000)
+    experienceReplay = deque(maxlen=50000)
     
     trajectories = []
 
