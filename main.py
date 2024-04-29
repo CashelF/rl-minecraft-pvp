@@ -63,22 +63,23 @@ def play_episodes(
         # Reset the environment
         frame = env.reset()
 
-        # First random step
-        action = env.action_space.sample()
-
-        # Step the environment
-        frame, reward, done, info = env.step(action)
-
         current_yaw = 0
         current_damage_dealt = 0
         current_damage_taken = 0
 
         episode_reward = 0
         episode_length = 0
+        
+        # Randomly move the agent to simulate random spawn points
+        randomly_move_agent(env)
+
+        # First random step
+        action = env.action_space.sample()
+
+        # Step the environment
+        frame, reward, done, info = env.step(action)
 
         state = encode_state(info, 0)
-        
-        randomly_move_agent(env)
 
         # Run the episode to completion
         done = False
@@ -97,8 +98,8 @@ def play_episodes(
                         # Bring back from the device
                         state = state.cpu()
             else: # Hardcoded Policy
-                x, z, yaw, life, distance_to_enemy, yaw_delta, enemy_life = state
-
+                speed, yaw_change, yaw, life, distance_to_enemy, yaw_delta, enemy_life = state
+                
                 if abs(yaw_delta) < 5: # If we are looking at the enemy
                     if distance_to_enemy < 3: #If they are close enough to hit, attack
                         action = 5 if action == 0 else 0
@@ -148,7 +149,7 @@ def play_episodes(
             
             # Add trajectory
             trajectories.append((state, action, reward, next_state, done))   
-            
+
             # Update the state
             state = next_state
 
