@@ -1,12 +1,11 @@
 import datetime
 import math
 import pickle
+import random
+import time
 
 import torch
 import torch.nn as nn
-
-import random
-import time
 
 FEATURE_SIZE = 7
 NUM_ACTIONS = 7
@@ -71,10 +70,15 @@ def randomly_move_agent(env, num_steps_range=(1, 10), num_turns_range=(0, 4)):
         env.agent_host.sendCommand(turn_direction)
         time.sleep(0.5)  # Sleep to ensure the command is executed before the next one
 
+    env.agent_host.sendCommand("turn 0")
+
     # Move forward
     for _ in range(num_steps):
         env.agent_host.sendCommand("move 1")
         time.sleep(0.5)
+
+    env.agent_host.sendCommand("move 0")
+    
 
 def preprocess_observation(info):
     """Extract the hand-crafted state vector from an observation"""
