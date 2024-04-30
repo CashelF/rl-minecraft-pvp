@@ -34,7 +34,7 @@ def load_trajectory_directory(directory: str):
         trajectories.extend(load_trajectory_data(file))
     return trajectories
 
-def build_model(num_inputs: int, num_actions: int, hidden_size: int = 512, dropout_prob: float = 0.4) -> nn.Module:
+def build_model(num_inputs: int, num_actions: int, hidden_size: int = 64, dropout_prob: float = 0.4) -> nn.Module:
     """Build a simple fully connected network."""
     model = nn.Sequential(
         nn.Linear(num_inputs, hidden_size),
@@ -46,15 +46,15 @@ def build_model(num_inputs: int, num_actions: int, hidden_size: int = 512, dropo
         nn.Linear(hidden_size, hidden_size),
         nn.ReLU(),
         nn.Dropout(dropout_prob),
-        nn.Linear(hidden_size, hidden_size),
-        nn.ReLU(),
-        nn.Dropout(dropout_prob),
-        nn.Linear(hidden_size, hidden_size),
-        nn.ReLU(),
-        nn.Dropout(dropout_prob),
-        nn.Linear(hidden_size, hidden_size),
-        nn.ReLU(),
-        nn.Dropout(dropout_prob),
+        # nn.Linear(hidden_size, hidden_size),
+        # nn.ReLU(),
+        # nn.Dropout(dropout_prob),
+        # nn.Linear(hidden_size, hidden_size),
+        # nn.ReLU(),
+        # nn.Dropout(dropout_prob),
+        # nn.Linear(hidden_size, hidden_size),
+        # nn.ReLU(),
+        # nn.Dropout(dropout_prob),
         nn.Linear(hidden_size, num_actions),
     )
 
