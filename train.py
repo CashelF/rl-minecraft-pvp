@@ -87,7 +87,7 @@ def train(model: nn.Module, trajectories: DataLoader, num_epochs: int = 10, gamm
         torch.save(model.state_dict(), os.path.join(model_dir, f"model{timestamp}.pt"))
 
 
-def train_random_sample(model: nn.Module, memory: deque, num_batches: int, gamma: float = 0.9, batch_size: int = 64, loss_fn: nn.Module = nn.MSELoss(), device: str = "cpu") -> float:
+def train_random_sample(model: nn.Module, memory: deque, num_batches: int, gamma: float = 0.9, batch_size: int = 64, loss_fn: nn.Module = nn.MSELoss(reduction='none'), device: str = "cpu") -> float:
     """Train the model by randomly sampling from the experience replay buffer. Returns the average loss accross all batches"""
     # Set the model to training mode
     model.train()
@@ -102,7 +102,7 @@ def train_random_sample(model: nn.Module, memory: deque, num_batches: int, gamma
         batch = random.sample(memory, min(batch_size, len(memory)))
 
         # Unpack the batch
-        states, actions, rewards, next_states, dones = zip(*batch)
+        states, actions, rewards, next_states, dones, behavior_probabilities = zip(*batch)
 
         # Expand the actions, rewards, and dones
         states = torch.stack(states).float()
@@ -110,6 +110,7 @@ def train_random_sample(model: nn.Module, memory: deque, num_batches: int, gamma
         rewards = torch.tensor(rewards).unsqueeze(1)
         next_states = torch.stack(next_states).float()
         dones = torch.tensor(dones, dtype=torch.long).unsqueeze(1)
+        behavior_probabilities = torch.tensor(behavior_probabilities).unsqueeze(1)
 
         # Send the batch to the device
         states = states.to(device)
@@ -117,17 +118,32 @@ def train_random_sample(model: nn.Module, memory: deque, num_batches: int, gamma
         rewards = rewards.to(device)
         next_states = next_states.to(device)
         dones = dones.to(device)
+        behavior_probabilities = behavior_probabilities.to(device)
+
 
         # Compute the Q-values
-        current_q_values = model(states).gather(1, actions)
+        current_q_values = model(states)
+
+        # Calculate the importance sampling ratio
+        target_probabilities = torch.softmax(current_q_values, dim=1).gather(1, actions)
+
+        importance_sampling_ratio = target_probabilities / behavior_probabilities
+
+        # Compute the Q-values
+        current_q_values = current_q_values.gather(1, actions)
         next_q_values = model(next_states).max(1)[0].detach().unsqueeze(1)
         expected_q_values = rewards + gamma * next_q_values * (1 - dones)
 
         # Ensure the expected_q_values tensor is float
         expected_q_values = expected_q_values.float()
 
+        # Calculate the TD error
+        loss: torch.Tensor = importance_sampling_ratio * (expected_q_values - current_q_values)
+
+        # loss: torch.Tensor = torch.mean((importance_sampling_ratio * td_error).pow(2))
+
         # Compute the loss
-        loss: torch.Tensor = loss_fn(current_q_values, expected_q_values)
+        # loss: torch.Tensor = torch.mean(importance_sampling_ratio * loss_fn(current_q_values, expected_q_values))
 
         # Tally the loss
         running_loss += loss.item()
@@ -143,6 +159,7 @@ def train_random_sample(model: nn.Module, memory: deque, num_batches: int, gamma
         rewards = rewards.cpu()
         next_states = next_states.cpu()
         dones = dones.cpu()
+        behavior_probabilities = behavior_probabilities.cpu()
 
     return running_loss / num_batches
 
@@ -150,9 +167,9 @@ def train_random_sample(model: nn.Module, memory: deque, num_batches: int, gamma
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    print(torch.__version__)
-    print(torch.version.cuda)
-    print(f"Device: {device}")
+    # print(torch.__version__)
+    # print(torch.version.cuda)
+    # print(f"Device: {device}")
     
     # Build the model
     model = build_model(FEATURE_SIZE, NUM_ACTIONS)
@@ -160,9 +177,9 @@ if __name__ == "__main__":
     print("Loading trajectories...")
     
     # Load the trajectory data
-    trajectories = load_trajectory_data("trajectories/trajectory_data_2024-04-28_03-12-05.pkl")
+    trajectories = load_trajectory_data("trajectories/trajectory_data_2024-04-30_02-04-57.pkl")
 
     print(f"{len(trajectories)} Trajectories loaded.")
 
     # Train the model
-    train(model, DataLoader(trajectories, batch_size=131072), num_epochs=20, log_dir="logs/Test", device=device)
+    train(model, DataLoader(trajectories, batch_size=131072), num_epochs=40, log_dir="logs/SmallModel D=0.4", device=device)

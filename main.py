@@ -4,6 +4,7 @@ import threading
 from collections import deque
 
 import marlo
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
@@ -11,6 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 from train import train_random_sample
 from utils import (
     FEATURE_SIZE,
+    NUM_ACTIONS,
     build_model,
     encode_state,
     get_new_filename,
@@ -84,23 +86,25 @@ def play_episodes(
         # Run the episode to completion
         done = False
         while not done:
+            behavior_probabilty = 0
+
             if can_train: # Model Policy
-                # Select an action
-                if random.random() < epsilon:  # Random action
-                    action = env.action_space.sample()
-                else:  # Action from the model
-                    with torch.no_grad():
-                        # Get the model's prediction
-                        logits = model(state.to(device))
+                # Forward pass
+                with torch.no_grad():
+                    # Get the model's prediction
+                    logits = model(state.to(device))
 
-                        # Sample from the distribution
-                        action_probs = torch.softmax(logits, dim=0)
+                    # Sample from the distribution
+                    action_probs = torch.softmax(logits, dim=0)
 
-                        # Sample an action from the distribution
-                        action = torch.multinomial(action_probs, num_samples=1).item()
+                    # Bring back from the device
+                    state = state.cpu()
 
-                        # Bring back from the device
-                        state = state.cpu()
+                    # Sample an action from the distribution
+                    action = env.action_space.sample() if random.random() < epsilon else torch.multinomial(action_probs, num_samples=1).item()
+
+                # Calculate the behavior probability
+                behavior_probabilty = epsilon * (1 / NUM_ACTIONS) + (1 - epsilon) * action_probs[action].item()
             else: # Hardcoded Policy
                 speed, yaw_change, yaw, life, distance_to_enemy, yaw_delta, enemy_life = state
 
@@ -111,8 +115,11 @@ def play_episodes(
                         action = 1 if action not in [3, 4] else 0
                 elif yaw_delta < 0: # Turn right
                     action = 3 if action != 1 else 0
-                elif yaw_delta > 0: # Turn left
+                else: # Turn left
                     action = 4 if action != 1 else 0
+
+                # Behavior probability is always 1 because the policy is deterministic
+                behavior_probabilty = 1
 
             # Step the environment
             frame, reward, done, info = env.step(action)
@@ -129,9 +136,9 @@ def play_episodes(
                     reward += (info["observation"]["DamageDealt"] - current_damage_dealt) / 10
                     current_damage_dealt = info["observation"]["DamageDealt"]
 
-                if info["observation"]["DamageTaken"] > current_damage_taken:
-                    reward -= (info["observation"]["DamageTaken"] - current_damage_taken) / 10
-                    current_damage_taken = info["observation"]["DamageTaken"]
+                # if info["observation"]["DamageTaken"] > current_damage_taken:
+                #     reward -= (info["observation"]["DamageTaken"] - current_damage_taken) / 10
+                #     current_damage_taken = info["observation"]["DamageTaken"]
                 
                 if info["observation"]["PlayersKilled"] > 0:
                     print(f"{info['observation']['Name']} killed the enemy!")
@@ -149,10 +156,10 @@ def play_episodes(
             episode_length += 1
 
             # Store the transition
-            memory.append((state, action, reward, next_state, done))
+            memory.append((state, action, reward, next_state, done, behavior_probabilty))
             
             # Add trajectory
-            trajectories.append((state, action, reward, next_state, done))   
+            trajectories.append((state, action, reward, next_state, done, behavior_probabilty))   
 
             # Update the state
             state = next_state
@@ -193,7 +200,7 @@ def start_agent(join_token, memory, trajectories, model: nn.Module, can_train: b
     env = marlo.init(join_token)
 
     # Train for 2000 episodes
-    play_episodes(env, memory, trajectories, model, episodes=4000, log_dir="logs/Sampling", can_train=can_train)
+    play_episodes(env, memory, trajectories, model, episodes=4000, log_dir="logs/ImportanceSamplingTDUpdate", can_train=can_train)
 
     # Close the environment
     env.close()
@@ -220,7 +227,7 @@ if __name__ == "__main__":
     assert len(join_tokens) == 2
 
     # Build the model
-    model = build_model(num_inputs=FEATURE_SIZE, num_actions=7)
+    model = build_model(num_inputs=FEATURE_SIZE, num_actions=NUM_ACTIONS)
 
     # model.load_state_dict(torch.load("models/bot.pt"))
 
