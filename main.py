@@ -84,22 +84,26 @@ def play_episodes(
         # Run the episode to completion
         done = False
         while not done:
-            if can_train: # Epsilon-Greedy Model Policy
+            if can_train: # Model Policy
                 # Select an action
                 if random.random() < epsilon:  # Random action
                     action = env.action_space.sample()
                 else:  # Action from the model
                     with torch.no_grad():
-                        # Send the state to the device
-                        state = state.to(device)
+                        # Get the model's prediction
+                        logits = model(state.to(device))
 
-                        action = torch.argmax(model(state)).item()
+                        # Sample from the distribution
+                        action_probs = torch.softmax(logits, dim=0)
+
+                        # Sample an action from the distribution
+                        action = torch.multinomial(action_probs, num_samples=1).item()
 
                         # Bring back from the device
                         state = state.cpu()
             else: # Hardcoded Policy
                 speed, yaw_change, yaw, life, distance_to_enemy, yaw_delta, enemy_life = state
-                
+
                 if abs(yaw_delta) < 5: # If we are looking at the enemy
                     if distance_to_enemy < 3: #If they are close enough to hit, attack
                         action = 5 if action == 0 else 0
@@ -124,7 +128,7 @@ def play_episodes(
                 if info["observation"]["DamageDealt"] > current_damage_dealt:
                     reward += (info["observation"]["DamageDealt"] - current_damage_dealt) / 10
                     current_damage_dealt = info["observation"]["DamageDealt"]
-                    
+
                 if info["observation"]["DamageTaken"] > current_damage_taken:
                     reward -= (info["observation"]["DamageTaken"] - current_damage_taken) / 10
                     current_damage_taken = info["observation"]["DamageTaken"]
@@ -189,7 +193,7 @@ def start_agent(join_token, memory, trajectories, model: nn.Module, can_train: b
     env = marlo.init(join_token)
 
     # Train for 2000 episodes
-    play_episodes(env, memory, trajectories, model, episodes=4000, log_dir="logs/B(atman)etterStates", can_train=can_train)
+    play_episodes(env, memory, trajectories, model, episodes=4000, log_dir="logs/Sampling", can_train=can_train)
 
     # Close the environment
     env.close()
