@@ -138,7 +138,7 @@ def train_random_sample(model: nn.Module, memory: deque, num_batches: int, gamma
         expected_q_values = expected_q_values.float()
 
         # Calculate the TD error
-        loss: torch.Tensor = importance_sampling_ratio * (expected_q_values - current_q_values)
+        loss: torch.Tensor = torch.mean((importance_sampling_ratio * (expected_q_values - current_q_values)).pow(2))
 
         # loss: torch.Tensor = torch.mean((importance_sampling_ratio * td_error).pow(2))
 
