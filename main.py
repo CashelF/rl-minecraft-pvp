@@ -13,6 +13,7 @@ from train import train_random_sample
 from utils import (
     FEATURE_SIZE,
     NUM_ACTIONS,
+    bound_angle,
     build_model,
     encode_state,
     get_new_filename,
@@ -67,7 +68,6 @@ def play_episodes(
 
         current_yaw = 0
         current_damage_dealt = 0
-        current_damage_taken = 0
 
         episode_reward = 0
         episode_length = 0
@@ -124,9 +124,6 @@ def play_episodes(
             # Step the environment
             frame, reward, done, info = env.step(action)
 
-            # Small negative reward for each step
-            reward -= 0.1
-
             # Preprocess the next state
             next_state = encode_state(info, current_yaw)
 
@@ -135,19 +132,15 @@ def play_episodes(
                 if info["observation"]["DamageDealt"] > current_damage_dealt:
                     reward += (info["observation"]["DamageDealt"] - current_damage_dealt) / 10
                     current_damage_dealt = info["observation"]["DamageDealt"]
-
-                # if info["observation"]["DamageTaken"] > current_damage_taken:
-                #     reward -= (info["observation"]["DamageTaken"] - current_damage_taken) / 10
-                #     current_damage_taken = info["observation"]["DamageTaken"]
                 
                 if info["observation"]["PlayersKilled"] > 0:
                     print(f"{info['observation']['Name']} killed the enemy!")
                     env.agent_host.sendCommand("quit")
-                    reward += 100
+                    reward += 100 - 0.1 * episode_length
                     done = True   
 
                 # Update the current yaw measurement
-                current_yaw = info["observation"]["Yaw"]  # TODO: DO WE HAVE TO BOUND THIS
+                current_yaw = bound_angle(info["observation"]["Yaw"])
             except:
                 print("Too bad!")
 

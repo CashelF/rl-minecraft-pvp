@@ -11,17 +11,17 @@ import torch.nn as nn
 FEATURE_SIZE = 7
 NUM_ACTIONS = 7
 
-def get_new_filename():
+def get_new_filename() -> str:
     """Generate a unique filename using the current timestamp."""
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     return f"trajectory_data_{timestamp}.pkl"
 
-def save_trajectory(filename, trajectory):
+def save_trajectory(filename: str, trajectory) -> None:
     """Save the complete trajectory list to a binary file using pickle."""
     with open(filename, 'wb') as file:  # 'wb' for writing in binary
         pickle.dump(trajectory, file)
 
-def load_trajectory_data(filename):
+def load_trajectory_data(filename: str):
     """Load the entire list of trajectory data from a pickle file."""
     with open(filename, 'rb') as file:
         trajectory = pickle.load(file)
@@ -34,7 +34,16 @@ def load_trajectory_directory(directory: str):
         trajectories.extend(load_trajectory_data(file))
     return trajectories
 
-def build_model(num_inputs: int, num_actions: int, hidden_size: int = 64, dropout_prob: float = 0.4) -> nn.Module:
+def bound_angle(angle: float) -> float:
+    """Bound an angle between -180 and 180 degrees."""
+    while angle > 180:
+        angle -= 360
+    while angle < -180:
+        angle += 360
+
+    return angle
+
+def build_model(num_inputs: int, num_actions: int, hidden_size: int = 256, dropout_prob: float = 0.2) -> nn.Module:
     """Build a simple fully connected network."""
     model = nn.Sequential(
         nn.Linear(num_inputs, hidden_size),
@@ -46,15 +55,9 @@ def build_model(num_inputs: int, num_actions: int, hidden_size: int = 64, dropou
         nn.Linear(hidden_size, hidden_size),
         nn.ReLU(),
         nn.Dropout(dropout_prob),
-        # nn.Linear(hidden_size, hidden_size),
-        # nn.ReLU(),
-        # nn.Dropout(dropout_prob),
-        # nn.Linear(hidden_size, hidden_size),
-        # nn.ReLU(),
-        # nn.Dropout(dropout_prob),
-        # nn.Linear(hidden_size, hidden_size),
-        # nn.ReLU(),
-        # nn.Dropout(dropout_prob),
+        nn.Linear(hidden_size, hidden_size),
+        nn.ReLU(),
+        nn.Dropout(dropout_prob),
         nn.Linear(hidden_size, num_actions),
     )
 
@@ -118,7 +121,7 @@ def encode_state(info: dict, previous_agent_yaw: float = 0.0):
         )
 
         # Bound yaw between -180 and 180
-        agent_yaw = agent_yaw + 360 if agent_yaw < -180 else agent_yaw - 360 if agent_yaw > 180 else agent_yaw
+        agent_yaw = bound_angle(agent_yaw)
 
         # Calculate the agent's overall speed
         agent_speed = math.sqrt(agent_x_motion**2 + agent_z_motion**2)
@@ -127,7 +130,7 @@ def encode_state(info: dict, previous_agent_yaw: float = 0.0):
         agent_yaw_delta = agent_yaw - previous_agent_yaw
 
         # Bound between -180 and 180
-        agent_yaw_delta = agent_yaw_delta + 360 if agent_yaw_delta < -180 else agent_yaw_delta - 360 if agent_yaw_delta > 180 else agent_yaw_delta
+        agent_yaw_delta = bound_angle(agent_yaw_delta)
 
         # Extract the enemy's position and life
         enemy_x, enemy_z, enemy_life = enemy["x"], enemy["z"], enemy["life"]
@@ -142,7 +145,7 @@ def encode_state(info: dict, previous_agent_yaw: float = 0.0):
         enemy_yaw_delta = agent_yaw - yaw_to_enemy
         
         # Bound between -180 and 180
-        enemy_yaw_delta = enemy_yaw_delta + 360 if enemy_yaw_delta < -  180 else enemy_yaw_delta - 360 if enemy_yaw_delta > 180 else enemy_yaw_delta
+        enemy_yaw_delta = bound_angle(enemy_yaw_delta)
 
         # Build the state vector
         state = torch.tensor(
