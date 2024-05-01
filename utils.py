@@ -43,10 +43,19 @@ def bound_angle(angle: float) -> float:
 
     return angle
 
-def build_model(num_inputs: int, num_actions: int, hidden_size: int = 256, dropout_prob: float = 0.2) -> nn.Module:
+def build_model(num_inputs: int, num_actions: int, hidden_size: int = 512, dropout_prob: float = 0.2) -> nn.Module:
     """Build a simple fully connected network."""
     model = nn.Sequential(
         nn.Linear(num_inputs, hidden_size),
+        nn.ReLU(),
+        nn.Dropout(dropout_prob),
+        nn.Linear(hidden_size, hidden_size),
+        nn.ReLU(),
+        nn.Dropout(dropout_prob),
+        nn.Linear(hidden_size, hidden_size),
+        nn.ReLU(),
+        nn.Dropout(dropout_prob),
+        nn.Linear(hidden_size, hidden_size),
         nn.ReLU(),
         nn.Dropout(dropout_prob),
         nn.Linear(hidden_size, hidden_size),
@@ -63,30 +72,22 @@ def build_model(num_inputs: int, num_actions: int, hidden_size: int = 256, dropo
 
     return model
 
-def randomly_move_agent(env, num_steps_range=(1, 10), num_turns_range=(0, 4)):
-    """Move the agent randomly at the start of the episode to simulate changing spawn points.
-    
-    Args:
-        env: The environment instance for the agent.
-        num_steps_range (tuple): A tuple specifying the min and max number of steps the agent should move forward.
-        num_turns_range (tuple): A tuple specifying the min and max number of 90-degree turns the agent should make.
-    """
-    num_steps = random.randint(*num_steps_range)
-    num_turns = random.randint(*num_turns_range)
-    turn_direction = random.choice(["turn 1", "turn -1"])  # 'turn 1' for right, 'turn -1' for left
+def randomly_move_agent(env):
+    """Move the agent randomly at the start of the episode to simulate changing spawn points."""
+    # Turn randomly
+    turn_command = f"turn {random.uniform(-1, 1):.2f}"
+    env.agent_host.sendCommand(turn_command)
+    time.sleep(2)  # Sleep to ensure the command is executed before the next one
 
-    # Execute turn commands
-    for _ in range(num_turns):
-        env.agent_host.sendCommand(turn_direction)
-        time.sleep(0.5)  # Sleep to ensure the command is executed before the next one
-
+    # Stop turning
     env.agent_host.sendCommand("turn 0")
 
-    # Move forward
-    for _ in range(num_steps):
-        env.agent_host.sendCommand("move 1")
-        time.sleep(0.5)
+    # Move randomly
+    move_command = f"move {random.uniform(-1, 1):.2f}"
+    env.agent_host.sendCommand(move_command)
+    time.sleep(2)
 
+    # Stop moving
     env.agent_host.sendCommand("move 0")
     
 
