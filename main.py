@@ -147,7 +147,7 @@ def play_episodes(
                     done = True   
 
                 # Update the current yaw measurement
-                current_yaw = info["observation"]["Yaw"]  
+                current_yaw = info["observation"]["Yaw"]  # TODO: DO WE HAVE TO BOUND THIS
             except:
                 print("Too bad!")
 
