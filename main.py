@@ -36,7 +36,7 @@ def play_episodes(
     log_dir: str = "logs/",
     model_dir: str = "models/",
     trajectory_dir: str = "trajectories/",
-    can_train: bool = False,
+    primary_agent: bool = False,
 ):
 
     # Ensure the output directories exist
@@ -46,7 +46,7 @@ def play_episodes(
     # Initialize epsilon
     epsilon = initial_epsilon
 
-    if can_train:
+    if primary_agent:
         # Create a tensorboard writer
         writer = SummaryWriter(log_dir=log_dir)
 
@@ -59,7 +59,7 @@ def play_episodes(
     # Run the training loop
     for episode in range(episodes):
 
-        if can_train:
+        if primary_agent:
             # Set the model to evaluation mode
             model.eval()
 
@@ -88,7 +88,7 @@ def play_episodes(
         while not done:
             behavior_probabilty = 0
 
-            if can_train: # Model Policy
+            if primary_agent: # Model Policy
                 # Forward pass
                 with torch.no_grad():
                     # Get the model's prediction
@@ -159,7 +159,7 @@ def play_episodes(
 
         print(f"Episode {episode + 1} Reward({threading.current_thread()}): {episode_reward:.2f}")
 
-        if can_train:
+        if primary_agent:
             # Train on trajectory data from the experience replay buffer
             loss = train_random_sample(model, memory, episode_length, gamma=gamma, device=device)
 
@@ -193,7 +193,7 @@ def start_agent(join_token, memory, trajectories, model: nn.Module, can_train: b
     env = marlo.init(join_token)
 
     # Train for 2000 episodes
-    play_episodes(env, memory, trajectories, model, episodes=2000, log_dir="logs/Importance Sampling", can_train=can_train)
+    play_episodes(env, memory, trajectories, model, episodes=4000, log_dir="logs/ImportanceSamplingTDUpdate", primary_agent=can_train)
 
     # Close the environment
     env.close()
