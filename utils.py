@@ -11,17 +11,17 @@ import torch.nn as nn
 FEATURE_SIZE = 7
 NUM_ACTIONS = 7
 
-def get_new_filename():
+def get_new_filename() -> str:
     """Generate a unique filename using the current timestamp."""
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     return f"trajectory_data_{timestamp}.pkl"
 
-def save_trajectory(filename, trajectory):
+def save_trajectory(filename: str, trajectory) -> None:
     """Save the complete trajectory list to a binary file using pickle."""
     with open(filename, 'wb') as file:  # 'wb' for writing in binary
         pickle.dump(trajectory, file)
 
-def load_trajectory_data(filename):
+def load_trajectory_data(filename: str):
     """Load the entire list of trajectory data from a pickle file."""
     with open(filename, 'rb') as file:
         trajectory = pickle.load(file)
@@ -34,7 +34,7 @@ def load_trajectory_directory(directory: str):
         trajectories.extend(load_trajectory_data(file))
     return trajectories
 
-def bound_angle(angle: float):
+def bound_angle(angle: float) -> float:
     """Bound an angle between -180 and 180 degrees."""
     while angle > 180:
         angle -= 360
@@ -43,7 +43,7 @@ def bound_angle(angle: float):
 
     return angle
 
-def build_model(num_inputs: int, num_actions: int, hidden_size: int = 256, dropout_prob: float = 0.4) -> nn.Module:
+def build_model(num_inputs: int, num_actions: int, hidden_size: int = 256, dropout_prob: float = 0.2) -> nn.Module:
     """Build a simple fully connected network."""
     model = nn.Sequential(
         nn.Linear(num_inputs, hidden_size),
