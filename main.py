@@ -68,7 +68,6 @@ def play_episodes(
 
         current_yaw = 0
         current_damage_dealt = 0
-        current_damage_taken = 0
 
         episode_reward = 0
         episode_length = 0
@@ -125,9 +124,6 @@ def play_episodes(
             # Step the environment
             frame, reward, done, info = env.step(action)
 
-            # Small negative reward for each step
-            reward -= 0.1
-
             # Preprocess the next state
             next_state = encode_state(info, current_yaw)
 
@@ -140,7 +136,7 @@ def play_episodes(
                 if info["observation"]["PlayersKilled"] > 0:
                     print(f"{info['observation']['Name']} killed the enemy!")
                     env.agent_host.sendCommand("quit")
-                    reward += 100
+                    reward += 100 - 0.1 * episode_length
                     done = True   
 
                 # Update the current yaw measurement
@@ -197,7 +193,7 @@ def start_agent(join_token, memory, trajectories, model: nn.Module, can_train: b
     env = marlo.init(join_token)
 
     # Train for 2000 episodes
-    play_episodes(env, memory, trajectories, model, episodes=4000, log_dir="logs/ImportanceSamplingTDUpdate", can_train=can_train)
+    play_episodes(env, memory, trajectories, model, episodes=2000, log_dir="logs/Importance Sampling", can_train=can_train)
 
     # Close the environment
     env.close()
