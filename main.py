@@ -13,6 +13,7 @@ from train import train_random_sample
 from utils import (
     FEATURE_SIZE,
     NUM_ACTIONS,
+    bound_angle,
     build_model,
     encode_state,
     get_new_filename,
@@ -135,10 +136,6 @@ def play_episodes(
                 if info["observation"]["DamageDealt"] > current_damage_dealt:
                     reward += (info["observation"]["DamageDealt"] - current_damage_dealt) / 10
                     current_damage_dealt = info["observation"]["DamageDealt"]
-
-                # if info["observation"]["DamageTaken"] > current_damage_taken:
-                #     reward -= (info["observation"]["DamageTaken"] - current_damage_taken) / 10
-                #     current_damage_taken = info["observation"]["DamageTaken"]
                 
                 if info["observation"]["PlayersKilled"] > 0:
                     print(f"{info['observation']['Name']} killed the enemy!")
@@ -147,7 +144,7 @@ def play_episodes(
                     done = True   
 
                 # Update the current yaw measurement
-                current_yaw = info["observation"]["Yaw"]  
+                current_yaw = bound_angle(info["observation"]["Yaw"])
             except:
                 print("Too bad!")
 
