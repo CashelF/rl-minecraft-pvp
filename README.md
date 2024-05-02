@@ -15,7 +15,7 @@ conda env create -f environment.yaml
 conda activate rl
 ```
 
-5. Launch two minecraft instances:
+5. Launch two minecraft instances and begin learning:
 
 On Windows:
 ```bash
@@ -28,7 +28,13 @@ $MALMO_MINECRAFT_ROOT/launchClient.sh -port 10000
 $MALMO_MINECRAFT_ROOT/launchClient.sh -port 10001
 ```
 
-6. Begin learning:
+Begin learning:
 ```bash
 python main.py
+```
+
+Alternatively, instead of 5,
+```bash
+chmod +x run.sh
+./run.sh
 ```
