@@ -6,9 +6,11 @@ if [ -z "$MALMO_MINECRAFT_ROOT" ]; then
     exit 1
 fi
 
+echo "${MALMO_MINECRAFT_ROOT}launchClient.sh"
+
 # Starting the first Minecraft client on port 10000
 echo "Launching the first Minecraft client on port 10000..."
-"$MALMO_MINECRAFT_ROOT/launchClient.sh" -port 10000 &
+sudo "${MALMO_MINECRAFT_ROOT}launchClient.sh" -port 10000 &
 first_pid=$!
 echo "First Minecraft client launched with PID $first_pid"
 
@@ -17,7 +19,7 @@ sleep 10
 
 # Starting the second Minecraft client on port 10001
 echo "Launching the second Minecraft client on port 10001..."
-"$MALMO_MINECRAFT_ROOT/launchClient.sh" -port 10001 &
+sudo "${MALMO_MINECRAFT_ROOT}launchClient.sh" -port 10001 &
 second_pid=$!
 echo "Second Minecraft client launched with PID $second_pid"
 
