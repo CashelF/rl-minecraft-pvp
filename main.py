@@ -1,286 +1,243 @@
-# $MALMO_MINECRAFT_ROOT/launchClient.sh -port 10000
-import math
+import os
 import random
+import threading
 from collections import deque
 
 import marlo
+import numpy as np
 import torch
 import torch.nn as nn
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
-from environment import ZombieEnv
-import threading
-import pickle
 
-FEATURE_SIZE = 3
-HIDDEN_SIZE = 256
-DROPOUT_PROB = 0.1
+from train import train_random_sample
+from utils import (
+    FEATURE_SIZE,
+    NUM_ACTIONS,
+    bound_angle,
+    build_model,
+    encode_state,
+    get_new_filename,
+    randomly_move_agent,
+    save_trajectory,
+)
 
-def save_data_with_pickle(data, filename):
-    with open(filename, 'wb') as f:
-        pickle.dump(data, f)
+trajectory_file_name = get_new_filename()
 
-def build_model(num_inputs: int, num_actions: int, device: str = "cpu"):
-  # Fully connected model
-  model = nn.Sequential(
-    nn.Linear(num_inputs, HIDDEN_SIZE),
-    nn.ReLU(),
-    nn.Dropout(DROPOUT_PROB),
-    nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
-    nn.ReLU(),
-    nn.Dropout(DROPOUT_PROB),
-    nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
-    nn.ReLU(),
-    nn.Dropout(DROPOUT_PROB),
-    nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
-    nn.ReLU(),
-    nn.Dropout(DROPOUT_PROB),
-    nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
-    nn.ReLU(),
-    nn.Dropout(DROPOUT_PROB),
-    nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
-    nn.ReLU(),
-    nn.Dropout(DROPOUT_PROB),
-    nn.Linear(HIDDEN_SIZE, num_actions)
-  )
+def play_episodes(
+    env,
+    model: nn.Module,
+    memory: deque,
+    trajectories: list,
+    episodes: int = 500,
+    gamma: float = 0.9,
+    initial_epsilon: float = 0.9,
+    final_epsilon: float = 0.1,
+    epsilon_decay: float = 0.99,
+    log_dir: str = "logs/",
+    model_dir: str = "models/",
+    trajectory_dir: str = "trajectories/",
+    primary_agent: bool = False,
+):
 
-  # Send the model to the device
-  model = model.to(device)
+    # Ensure the output directories exist
+    os.makedirs(model_dir, exist_ok=True)
+    os.makedirs(trajectory_dir, exist_ok=True)
 
-  return model
+    # Initialize epsilon
+    epsilon = initial_epsilon
 
+    if primary_agent:
+        # Create a tensorboard writer
+        writer = SummaryWriter(log_dir=log_dir)
 
-def initialize_environment(port, mission_file: str = "mission.xml"):
-  # Define the client pool
-  client_pool = [('127.0.0.1', port)]
+        # Set the device
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-  # Create the environment. Whoever made suppress_info default to False, I will find you.
-  join_tokens = marlo.make(mission_file, params={"client_pool": client_pool, "suppress_info": False, 'kill_clients_after_num_rounds': 1000, "videoResolution": [800, 600], "PrioritiseOffscreenRendering": False})
+        # Send the model to the device
+        model.to(device)
 
-  # Initialize the environment (Assuming only one agent)
-  env = marlo.init(join_tokens[0])
-  env = ZombieEnv(env)
-  return env
+    # Run the training loop
+    for episode in range(episodes):
 
-def preprocess_observation(info: dict) -> torch.Tensor:
-  # TODO: ADD STATE OF LOOKING AT ZOMBIE, break out yaw differential function from options
-  try:
-    # Extract the observation
-    observation = info['observation']
+        if primary_agent:
+            # Set the model to evaluation mode
+            model.eval()
 
-    # Extract the agent's position
-    x = observation['XPos']
-    z = observation['ZPos']
-    yaw = observation['Yaw']
+        # Reset the environment
+        frame = env.reset()
 
-    if yaw < -180:
-      yaw += 360
-    if yaw > 180:
-      yaw -= 360
+        current_yaw = 0
+        current_damage_dealt = 0
 
-    # Add hostile mob information
-    for entity in observation['entities']:
-      if entity['name'] == 'Zombie':
-        dx = entity['x'] - x
-        dz = entity['z'] - z
-
-        distance_to_mob = math.sqrt(dx ** 2 + dz ** 2)
-        yaw_to_mob = -180 * math.atan2(dx, dz) / math.pi
+        episode_reward = 0
+        episode_length = 0
         
-        feature = [distance_to_mob, yaw_to_mob, yaw]
+        # Randomly move the agent to simulate random spawn points
+        randomly_move_agent(env)
 
-        return torch.tensor(feature, dtype=torch.float32)
-    
-    print("Failed to find hostile mob")
-
-    return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
-  except:
-    print("Failed to find observation")
-    return torch.zeros(FEATURE_SIZE, dtype=torch.float32)
-
-def train(env, model: nn.Module, episodes: int = 500, gamma: float = 0.9, initial_epsilon: float = 0.9, final_epsilon: float = 0.1, epsilon_decay: float = 0.995, batch_size: int = 64, loss_fn: nn.Module = nn.MSELoss(), device: str = "cpu", log_dir: str = "logs/", output_path: str = "models/model.pt"):
-
-  # Define the optimizer
-  optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-
-  # Create a tensorboard writer
-  writer = SummaryWriter(log_dir=log_dir)
-
-  # Initialize a doubly ended queue to store training examples
-  memory = deque(maxlen=50000)
-
-  # Initializ epsilon
-  epsilon = initial_epsilon
-  
-  # env.agent_host.sendCommand("use 1")
-  # env.agent_host.sendCommand("hotbar.2")
-  # env.agent_host.sendCommand("hotbar.1 0")
-  # env.agent_host.sendCommand("hotbar.2 0")
-  # env.agent_host.sendCommand("hotbar.3 1")
-  # env.agent_host.sendCommand("hotbar.3 0")
-  # env.agent_host.sendCommand("hotbar.4 1")
-  # env.agent_host.sendCommand("hotbar.4 0")
-  # env.agent_host.sendCommand("use 0")
-
-  # Run the training loop
-  for episode in range(episodes):
-
-    # Set the model to evaluation mode
-    model.eval()
-
-    # Reset the environment
-    frame = env.reset()
-
-    # First random step
-    action = env.action_space.sample()
-
-    # Step the environment
-    frame, reward, done, info = env.step(action)
-
-    state = preprocess_observation(info['observation'])
-
-    episode_reward = 0
-    episode_length = 0
-
-    # Run the episode to completion
-    done = False
-    while not done:
-        # TODO: implement this >
-        # if env.agent_host.peekWorldState().is_mission_running == False:
-        #   break
-        
-        # Select an action
-        if random.random() < epsilon: # Random action
-          action = env.action_space.sample()
-        else: # Action from the model
-          with torch.no_grad():
-            # Send the state to the device
-            state = state.to(device)
-
-            action = torch.argmax(model(state)).item()
-
-            # Bring back from the device
-            state = state.cpu()
+        # First random step
+        action = env.action_space.sample()
 
         # Step the environment
         frame, reward, done, info = env.step(action)
 
-        # Preprocess the next state
-        next_state = preprocess_observation(info)
+        state = encode_state(info, 0)
 
-        reward -= abs(next_state[1] - next_state[2]).item() / 180
-        
-        # This is very scuffed. There must be a better way to do this. Too bad!
-        try:
-          if info['observation']['MobsKilled'] > 0:
-            print("You killed the zombie!")
-            env.agent_host.sendCommand("quit")
-            reward = 100
-            done = True
-        except:
-          print("Too bad!")
+        # Run the episode to completion
+        done = False
+        while not done:
+            behavior_probabilty = 0
 
-        episode_reward += reward
-        episode_length += 1
+            if primary_agent: # Model Policy
+                # Forward pass
+                with torch.no_grad():
+                    # Get the model's prediction
+                    logits = model(state.to(device))
 
-        # if reward != 0:
-        #    print(f"Reward: {reward}")
+                    # Sample from the distribution
+                    action_probs = torch.softmax(logits, dim=0)
 
-        # Store the transition
-        memory.append((state, action, reward, next_state, done))
+                    # Bring back from the device
+                    state = state.cpu()
 
-        # Update the state
-        state = next_state
+                    # Sample an action from the distribution
+                    action = env.action_space.sample() if random.random() < epsilon else torch.multinomial(action_probs, num_samples=1).item()
 
-    # Set the model to training mode
-    model.train()
+                # Calculate the behavior probability
+                behavior_probabilty = epsilon * (1 / NUM_ACTIONS) + (1 - epsilon) * action_probs[action].item()
+            else: # Hardcoded Policy
+                speed, yaw_change, yaw, life, distance_to_enemy, yaw_delta, enemy_life = state
 
-    running_loss = 0
+                if abs(yaw_delta) < 5: # If we are looking at the enemy
+                    if distance_to_enemy < 3: #If they are close enough to hit, attack
+                        action = 5 if action == 0 else 0
+                    else: # If they are too far, move towards them
+                        action = 1 if action not in [3, 4] else 0
+                elif yaw_delta < 0: # Turn right
+                    action = 3 if action != 1 else 0
+                else: # Turn left
+                    action = 4 if action != 1 else 0
 
-    for states, actions, rewards, next_states, dones in tqdm(DataLoader(memory, batch_size, shuffle=True), desc=f"Episode {episode + 1} Training", unit="batch"):
-        # Expand the actions, rewards, and dones
-        states = states.float()
-        actions = actions.long().unsqueeze(1)
-        rewards = rewards.unsqueeze(1)
-        next_states = next_states.float()
-        dones = dones.long().unsqueeze(1)
+                # Behavior probability is always 1 because the policy is deterministic
+                behavior_probabilty = 1
 
-        # Send the batch to the device
-        states = states.to(device)
-        actions = actions.to(device)
-        rewards = rewards.to(device)
-        next_states = next_states.to(device)
-        dones = dones.to(device)
+            # Step the environment
+            frame, reward, done, info = env.step(action)
 
-        # Compute the Q-values
-        current_q_values = model(states).gather(1, actions)
-        next_q_values = model(next_states).max(1)[0].detach().unsqueeze(1)
-        expected_q_values = rewards + gamma * next_q_values * (1 - dones)
+            # Preprocess the next state
+            next_state = encode_state(info, current_yaw)
 
-        # Ensure the expected_q_values tensor is float
-        expected_q_values = expected_q_values.float()
+            # This is very scuffed. There must be a better way to do this. Too bad!
+            try:
+                if info["observation"]["DamageDealt"] > current_damage_dealt:
+                    reward += (info["observation"]["DamageDealt"] - current_damage_dealt) / 10
+                    current_damage_dealt = info["observation"]["DamageDealt"]
+                
+                if info["observation"]["PlayersKilled"] > 0:
+                    print(f"{info['observation']['Name']} killed the enemy!")
+                    env.agent_host.sendCommand("quit")
+                    reward += 100 - 0.1 * episode_length
+                    done = True   
 
-        # Compute the loss
-        loss = loss_fn(current_q_values, expected_q_values)
+                # Update the current yaw measurement
+                current_yaw = bound_angle(info["observation"]["Yaw"])
+            except:
+                print("Too bad!")
 
-        # Tally the loss
-        running_loss += loss.item()
+            # Update the episode reward and length
+            episode_reward += reward
+            episode_length += 1
 
-        # Perform a gradient descent step
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            # Store the transition
+            memory.append((state, action, reward, next_state, done, behavior_probabilty))
+            
+            # Add trajectory
+            trajectories.append((state, action, reward, next_state, done, behavior_probabilty))   
 
-        # Bring back to the CPU
-        states = states.cpu()
-        actions = actions.cpu()
-        rewards = rewards.cpu()
-        next_states = next_states.cpu()
-        dones = dones.cpu()
+            # Update the state
+            state = next_state
+
+        print(f"Episode {episode + 1} Reward({threading.current_thread()}): {episode_reward:.2f}")
+
+        if primary_agent:
+            # Train on trajectory data from the experience replay buffer
+            loss = train_random_sample(model, memory, episode_length, gamma=gamma, device=device)
+
+            # Log the loss
+            writer.add_scalar("Loss", loss, episode)
+
+            # Log the episode reward
+            writer.add_scalar("Reward", episode_reward, episode)
+
+            # Log the episode length
+            writer.add_scalar("Episode Length", episode_length, episode)
+
+            # Log the epsilon
+            writer.add_scalar("Epsilon", epsilon, episode)
+
+            # Decay epsilon
+            epsilon = max(final_epsilon, epsilon_decay * epsilon)
+            
+            # Save the trajectory data
+            save_trajectory(os.path.join(trajectory_dir, trajectory_file_name), trajectories)
+
+            # Save the model
+            torch.save(model.state_dict(), os.path.join(model_dir, "model.pt"))  
+
+            print(f"Episode {episode + 1} Loss: {loss:.2f}")  
 
 
-    print(f"Episode {episode + 1} Loss: {running_loss / len(memory):.2f} Episode Reward: {episode_reward:.2f}")
+@marlo.threaded
+def start_agent(join_token, memory, trajectories, model: nn.Module, can_train: bool = False):
+    # Initialize the environment
+    env = marlo.init(join_token)
 
-    # Log the loss
-    writer.add_scalar("Loss", running_loss / len(memory), episode)
+    # Train for 2000 episodes
+    play_episodes(env, memory, trajectories, model, episodes=4000, log_dir="logs/ImportanceSamplingTDUpdate", primary_agent=can_train)
 
-    # Log the epsilon
-    writer.add_scalar("Epsilon", epsilon, episode)
+    # Close the environment
+    env.close()
 
-    # Log the reward
-    writer.add_scalar("Reward", episode_reward, episode)
-
-    # Log the episode length
-    writer.add_scalar("Episode Length", episode_length, episode)
-
-    # Decay epsilon
-    epsilon = max(final_epsilon, epsilon_decay * epsilon)  
-
-    # Save the model
-    torch.save(model.state_dict(), output_path)
-    
-    save_data_with_pickle(memory, f"trajectories/trajectory_data_episode_{episode}.pkl")
-    
-  env.close()
-
-def setup_client(port):
-    env = initialize_environment(port)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = build_model(FEATURE_SIZE, env.action_space.n, device)
-    # Load the weights
-    model.load_state_dict(torch.load("models/best.pt"))
-    train(env, model, episodes=1000, batch_size=64, device=device, output_path="models/model.pt")
 
 
 if __name__ == "__main__":
-  ports = [10000, 10001]
-  threads = [threading.Thread(target=setup_client, args=(port,)) for port in ports]
+    # Define the client pool
+    client_pool = [("127.0.0.1", 10000), ("127.0.0.1", 10001)]
 
-  for thread in threads:
-      thread.start()
-  for thread in threads:
-      thread.join()
+    # Create the environment
+    join_tokens = marlo.make(
+        "mission.xml",
+        params={
+            "client_pool": client_pool,
+            "suppress_info": False,
+            "kill_clients_after_num_rounds": 9999,
+            "videoResolution": [800, 600],
+            "PrioritiesOffscreenRendering": False,
+        },
+    )
 
-  
+    # Ensure we have two agents
+    assert len(join_tokens) == 2
+
+    # Build the model
+    model = build_model(num_inputs=FEATURE_SIZE, num_actions=NUM_ACTIONS)
+
+    # model.load_state_dict(torch.load("models/bot.pt"))
+
+    # Initialize the memory
+    memory = deque(maxlen=50000)
+    
+    trajectories = []
+
+    print("Starting Agents")
+
+    threads = []
+
+    threads.append(start_agent(join_tokens[0], model, memory, trajectories, can_train=True)[0])
+    threads.append(start_agent(join_tokens[1], model, memory, trajectories)[0])
+
+    # Wait for training to finish
+    for thread in threads:
+        thread.join()
+
+    print("Training Complete")
