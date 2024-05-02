@@ -8,13 +8,13 @@ import torch
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 
-from utils import FEATURE_SIZE, NUM_ACTIONS, build_model, preprocess_observation
+from utils import FEATURE_SIZE, NUM_ACTIONS, build_model, encode_state
 
 
 def play_episodes(
     env,
     model: nn.Module,
-    episodes: int = 500,
+    episodes: int = 1000,
     epsilon: float = 0,
 ):
 
@@ -33,7 +33,7 @@ def play_episodes(
         # Step the environment
         frame, reward, done, info = env.step(action)
 
-        state = preprocess_observation(info)
+        state = encode_state(info)
         
         current_damage_dealt = 0
         current_damage_taken = 0
@@ -49,13 +49,21 @@ def play_episodes(
                 action = env.action_space.sample()
             else:  # Action from the model
                 with torch.no_grad():
-                    action = torch.argmax(model(state)).item()
+                    # Get the model's prediction
+                    logits = model(state)
+
+                    # Sample from the distribution
+                    action_probs = torch.softmax(logits, dim=0)
+
+                    # Sample an action from the distribution
+                    # action = torch.multinomial(action_probs, num_samples=1).item()
+                    action = torch.argmax(action_probs).item()
 
             # Step the environment
             frame, reward, done, info = env.step(action)
 
             # Preprocess the next state
-            next_state = preprocess_observation(info)
+            next_state = encode_state(info)
 
             # Update the state
             state = next_state
@@ -90,10 +98,9 @@ if __name__ == "__main__":
     assert len(join_tokens) == 2
 
     # Build the model
-    model = build_model(num_inputs=FEATURE_SIZE, num_actions=7)
+    model = build_model(num_inputs=FEATURE_SIZE, num_actions=NUM_ACTIONS)
 
-    model.load_state_dict(torch.load("models/model2024-04-28_19-28-36.pt"))
-
+    model.load_state_dict(torch.load("models/model.pt"))
     threads = []
 
     threads.append(start_agent(join_tokens[0], model)[0])
